@@ -17,7 +17,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | Cash runway (definition) | (cash + cash equivalents + short-term investments) ÷ monthly burn, where burn = −TTM raw FCF (not SBC-adjusted, since stock comp isn't cash out) | Used wherever the plan says "cash runway". Burn ≤ 0 → runway n/m "not burning cash" |
 | `MIN_MARGIN_OF_SAFETY` | 0.20 | Graham Number at least 20% above price to pass |
 | `MIN_FCF_SPREAD_OVER_10Y` | 0.0 | SBC-adjusted FCF yield must beat the 10-year government bond yield of the stock's trading currency |
-| `RISK_FREE_SOURCES` | USD → yfinance `^TNX`; CAD → Bank of Canada Valet API, 10-year benchmark bond yield series (verify the series code, e.g. `BD.CDN.10YR.DQ.YLD`) | 10-year yield per trading currency |
+| `RISK_FREE_SOURCES` | USD → yfinance `^TNX`; CAD → Bank of Canada Valet API, 10-year benchmark bond yield series `BD.CDN.10YR.DQ.YLD` (verified 2026-09) | 10-year yield per trading currency |
 | `MIN_METRICS_FOR_PASS` | 3 | A screen Pass needs every available metric to pass and at least 3 of the 4 metrics available; fewer available → "Incomplete" |
 | `MAX_NET_DEBT_EBITDA` | 3.0 | Leverage ceiling |
 | `MAX_SHARE_GROWTH_PER_YEAR` | 0.0 | Pass if share count flat or shrinking |

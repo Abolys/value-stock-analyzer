@@ -96,6 +96,12 @@ table.t td{padding:5px 4px;border-bottom:0.5px solid var(--border);font-variant-
 
 <div class="st">Versus peers <span class="l" style="font-weight:400">· 5 peers from your universe lists</span></div><div id="peer"></div>
 
+<div class="st">Asset floor <span class="l" style="font-weight:400">· if the earnings case fails</span></div>
+<div class="card">
+<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;margin-bottom:8px"><span style="font-size:13px;font-weight:500">85% of the price covered by tangible book</span><span class="tag ta">Partly covered · P/TBV 1.2x</span></div>
+<div id="af"></div>
+<div class="l" style="margin-top:6px">Line = market cap $1.00B · negative values extend left of zero · no net-net flag (NCAV below market cap)</div>
+</div>
 <div class="grid2" style="margin-top:.5rem;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:start">
 <div><div class="st">Fair value sensitivity</div><table style="border-collapse:collapse;width:100%"><tbody id="hm"></tbody></table>
 <div class="l" style="margin-top:6px">Range $37–$63 · price implies ~+1%/yr, history +6%/yr</div></div>
@@ -204,6 +210,9 @@ $("tvn").innerHTML=tv.map(([n,a,b,dir])=>{let c="";if(typeof a==="number"&&a!==b
 
 const acc=[["Market-driven",14,9,3,2],["Company-specific",11,4,3,4]];
 $("acc").innerHTML=acc.map(([n,t,a,b,c])=>`<div style="display:grid;grid-template-columns:130px minmax(0,1fr) 60px;gap:10px;align-items:center;margin-bottom:8px"><span class="l">${n}</span><div style="display:flex;height:16px;border-radius:4px;overflow:hidden;gap:2px"><div style="width:${a/t*100}%;background:#1baf7a"></div><div style="width:${b/t*100}%;background:#b4b2a9"></div><div style="width:${c/t*100}%;background:#e34948"></div></div><span class="l">${a}/${t} hit</span></div>`).join("");
+const af=[["Market cap",1.00,"#898781"],["Tangible book",0.85,"#2a78d6"],["NCAV",-0.40,"#2a78d6"],["NNWC",-0.62,"#2a78d6"]];
+const aMin=-0.8,aMax=1.2,ax=v=>((v-aMin)/(aMax-aMin)*100);
+$("af").innerHTML=af.map(([n,v,c])=>{const z=ax(0),x=ax(v),left=Math.min(z,x),w=Math.abs(x-z);return `<div style="display:grid;grid-template-columns:100px minmax(0,1fr) 56px;gap:10px;align-items:center;height:24px"><span class="l">${n}</span><div style="position:relative;height:12px"><div style="position:absolute;left:${z}%;top:-4px;width:1px;height:20px;background:var(--border-strong)"></div><div style="position:absolute;left:${ax(1.0)}%;top:-6px;width:2px;height:24px;background:var(--text-primary)"></div><div style="position:absolute;left:${left}%;width:${w}%;height:12px;border-radius:3px;background:${c};opacity:${v<0?.55:1}"></div></div><span style="font-size:12px;text-align:right" class="${v<0?"r":""}">${v<0?"−":""}$${Math.abs(v).toFixed(2)}B</span></div>`}).join("");
 </script>
 </body>
 </html>
