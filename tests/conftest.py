@@ -28,6 +28,22 @@ def _temp_runs_db(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_llm_key(monkeypatch, request, tmp_path):
+    """Offline tests never see a real API key, the Claude Code CLI or the real LLM cache;
+    LLM calls go through mocks."""
+    import config
+    from llm import departure
+
+    monkeypatch.setattr(config, "LLM_CACHE_DB_PATH", tmp_path / "llm_cache.db")
+    monkeypatch.setattr(departure, "_default", None)
+    if request.node.get_closest_marker("live"):
+        return
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(config, "LLM_BACKEND", "api")  # never fall back to the real CLI offline
+
+
+@pytest.fixture(autouse=True)
 def _no_network(monkeypatch, request):
     if request.node.get_closest_marker("live"):
         return

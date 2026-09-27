@@ -85,3 +85,25 @@ def ffo(f: Fundamentals) -> Datum:
     if note:
         out.notes.append(note)
     return out
+
+
+def roic_fy(f: Fundamentals, d) -> Datum:
+    """ROIC for one fiscal year (NOPAT with that year's clamped effective tax rate / invested capital).
+    Invested capital ≤ 0 → n/m (the caller shows ROA instead, labelled)."""
+    ebit = f.fy("ebit", d)
+    if not ebit.ok:
+        ebit = f.fy("operating_income", d)
+    rate = safe_ratio(f.fy("tax_provision", d), f.fy("pretax_income", d), name="tax rate",
+                      nonpositive_reason="pretax income ≤ 0")
+    lo, hi = config.TAX_RATE_BOUNDS
+    t = min(hi, max(lo, rate.value)) if rate.ok else config.STATUTORY_TAX_RATE_FALLBACK
+    if not ebit.ok:
+        return Datum.missing(ebit.status)
+    nopat = combine(ebit.value * (1 - t), {"EBIT": ebit}, label="NOPAT")
+    return safe_ratio(nopat, f.fy("invested_capital", d), name="ROIC", nonpositive_reason="invested capital ≤ 0",
+                      num_name="NOPAT", den_name="invested capital")
+
+
+def roe_fy(f: Fundamentals, d) -> Datum:
+    return safe_ratio(f.fy("net_income", d), f.fy("stockholders_equity", d), name="ROE",
+                      nonpositive_reason="negative equity")

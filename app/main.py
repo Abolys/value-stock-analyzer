@@ -1,8 +1,9 @@
 """Value Stock Analyzer — plain shell (styling arrives in Phase 5).
 
-- Ticker page: the raw provider output with every value's period, provider and
-  N/A reason, plus the screen metrics for that ticker (information only:
-  manual tickers bypass the screen).
+- Ticker page: the four-lens analysis (Phase 3; each lens shown as it arrives,
+  then the aggregate and the analysis cost), the raw provider output with every
+  value's period, provider and N/A reason, and the screen metrics for that
+  ticker (information only: manual tickers bypass the screen).
 - Screener page: the latest completed screen run with its summary and a
   sortable results table; "Run new screen" launches scripts/run_screen.py in
   the background and shows its progress from the database.
@@ -35,6 +36,10 @@ from data.risk_free import risk_free_for  # noqa: E402
 from data.universe import list_labels, load_list  # noqa: E402
 from data.values import Datum  # noqa: E402
 from app import screen_jobs  # noqa: E402
+from analysis.models import LENS_LABELS, LENSES, AggregateResult, LensResult, QuantResult  # noqa: E402
+from analysis.pipeline import run_analysis  # noqa: E402
+from llm.client import LLMClient  # noqa: E402
+from storage import llm_store  # noqa: E402
 from screening.engine import ScreenContext, analyse_manual  # noqa: E402
 from screening.table import result_row  # noqa: E402
 from storage import screen_store as store  # noqa: E402
@@ -76,6 +81,79 @@ def statement_frame(stmt) -> pd.DataFrame:
     return pd.DataFrame(stmt.values).T.sort_index(axis=1, ascending=False)
 
 
+def show_lens(r: LensResult) -> None:
+    st.markdown(f"#### {r.label}: {r.display}" + (f" · confidence {r.confidence}" if r.ok else ""))
+    if r.stale:
+        st.warning(r.stale_label)
+    st.caption(f"Mapping: {r.mapping_line}")
+    if r.completeness:
+        st.caption(f"Data completeness: {r.completeness}")
+    for c in r.confidence_reasons:
+        st.caption(f"Low confidence: {c}")
+    if r.key_figures:
+        st.dataframe(pd.DataFrame([{"figure": k, "value": v} for k, v in r.key_figures.items()]),
+                     hide_index=True, width="stretch")
+    if isinstance(r, QuantResult) and r.grid is not None and r.grid.values:
+        st.caption("Sensitivity grid (fair value per share; rows = discount rate, columns = stage-1 growth; "
+                   "the score uses the centre cell)")
+        st.dataframe(pd.DataFrame([[f"{v:,.2f}" if v is not None else "N/A" for v in row] for row in r.grid.values],
+                                  index=[f"{x:.1%}" for x in r.grid.rates],
+                                  columns=[f"{g:+.1%}" for g in r.grid.growths]), width="stretch")
+    with st.expander("Rationale, assumptions"):
+        st.markdown(r.rationale)
+        st.json({k: (v if isinstance(v, (int, float, str, bool, list, dict)) or v is None else str(v))
+                 for k, v in r.assumptions.items()}, expanded=False)
+        if getattr(r, "payload", None):
+            st.caption("LLM payload (compact JSON sent to the model)")
+            st.json(r.payload, expanded=False)
+
+
+def show_aggregate(a: AggregateResult) -> None:
+    st.markdown(f"#### Aggregate: {a.display} — {a.verdict}")
+    if a.controversy:
+        st.warning(f"High controversy: the Devil's Advocate is {a.controversy_gap:.1f} points below the other "
+                   f"lenses' mean (threshold {config.CONTROVERSY_GAP:g}).")
+    st.markdown(a.rationale)
+
+
+def analysis_section(provider, ticker: str) -> None:
+    st.subheader("Four-lens analysis")
+    llm = LLMClient(db_path=config.RUNS_DB_PATH)
+    if llm.backend == "claude_code":
+        st.caption("LLM lenses run through the Claude Code CLI on your Claude subscription (no ANTHROPIC_API_KEY "
+                   "set): no API charge; the list-price equivalent is logged.")
+    elif not llm.configured:
+        st.info("No ANTHROPIC_API_KEY and no Claude Code CLI found: the Moat and Devil's Advocate lenses will "
+                "return \"Insufficient data - LLM not configured\" (cached answers are still used). "
+                "Set CLAUDE_CODE_CLI in .env if the CLI is installed somewhere unusual.")
+    use_edgar = st.checkbox("Include SEC EDGAR (leadership 8-K/6-K, Form 4 insiders)", value=True,
+                            key=f"an-edgar-{ticker}")
+    if not st.button("Run analysis", key=f"run-analysis-{ticker}",
+                     help="Moat and Devil's Advocate call the LLM (API or Claude Code; cached by input)."):
+        return
+    slots = {name: st.empty() for name in (*LENSES, "aggregate")}
+    for name in LENSES:
+        slots[name].info(f"{LENS_LABELS[name]}: running…")
+
+    def on_result(name: str, result) -> None:
+        with slots[name].container():
+            (show_aggregate if name == "aggregate" else show_lens)(result)
+
+    ctx = ScreenContext(provider=provider, db_path=config.RUNS_DB_PATH, today=date.today(),
+                        valet_fetch=services.valet_fetch())
+    run = run_analysis(ctx, ticker, llm=llm, edgar=services.build_edgar(provider) if use_edgar else None,
+                       on_result=on_result)
+    if run.load_error:
+        st.error(f"Analysis unavailable: {run.load_error}")
+        return
+    for e in run.errors:
+        st.error(f"Lens error: {e}")
+    list_price = sum(getattr(run.lens(n), "list_price_cost", 0.0) or 0.0 for n in ("moat", "devils_advocate"))
+    st.caption(f"Analysis {run.analysis_id} via {llm.backend}: API cost ${run.total_cost:.4f} (cache hits cost $0)"
+               + (f"; list-price equivalent ${list_price:.4f} on the subscription" if llm.backend == "claude_code"
+                  else "") + f". Fundamentals as of {run.fundamentals_as_of or 'N/A'}.")
+
+
 def ticker_page(provider, ticker: str) -> None:
     try:
         info = provider.get_info(ticker)
@@ -90,6 +168,8 @@ def ticker_page(provider, ticker: str) -> None:
              f"**Reporting currency:** {info.get('financial_currency') or 'N/A'}")
     if route.unmatched_industry:
         st.warning(f"Industry {route.industry!r} matches no SUBSECTOR_RULES entry; default financial treatment used.")
+
+    analysis_section(provider, ticker)
 
     stmts = {}
     for kind in ("income", "balance", "cashflow"):
@@ -195,7 +275,8 @@ def ticker_page(provider, ticker: str) -> None:
             for e in lead.events:
                 st.write(f"- {e.date} {e.role} {e.person or '(name not parsed)'} — {', '.join(e.sources)}: {e.detail}")
             if lead.unconfirmed_candidates:
-                st.caption(f"{len(lead.unconfirmed_candidates)} 6-K keyword hit(s) awaiting LLM confirmation (Phase 3); not counted.")
+                st.caption(f"{len(lead.unconfirmed_candidates)} 6-K keyword hit(s) not confirmed by the LLM check "
+                           f"({lead.unconfirmed_candidates[0].get('note') or 'unconfirmed'}); not counted.")
             since = (pd.Timestamp(date.today()) - pd.DateOffset(months=config.INSIDER_LOOKBACK_MONTHS)).date()
             ins = collect_insider_data(ticker, edgar, since)
             st.write(f"**Insider transactions since {since}:** {len(ins.transactions)} — coverage: {ins.coverage_label}")
@@ -311,6 +392,11 @@ def main() -> None:
         ticker = st.text_input("Ticker", key="ticker").strip().upper()
         page = st.radio("Page", ["Ticker data", "Screener"], key="page")
         st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
+        spend, calls, hits = llm_store.month_spend(path=config.RUNS_DB_PATH)
+        st.caption(f"API spend this month: ${spend:.2f} ({calls} LLM calls, {hits} cache hits)")
+        cc_calls, cc_est = llm_store.month_claude_code(path=config.RUNS_DB_PATH)
+        if cc_calls:
+            st.caption(f"Claude Code (subscription) this month: {cc_calls} calls, ≈${cc_est:.2f} at API list prices")
     if not report.ok:
         st.error(BANNER + "\n\n" + "\n".join(f"- {f}" for f in report.failures)
                  + "\n\nCached data is still shown, with its age.")

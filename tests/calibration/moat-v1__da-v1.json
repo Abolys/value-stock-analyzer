@@ -1,0 +1,157 @@
+{
+  "backend": "claude_code",
+  "created_at": "2026-09-27T15:16:22",
+  "model": "claude-sonnet-5",
+  "prompt_versions": {
+    "departure": "departure-v1",
+    "devils_advocate": "da-v1",
+    "moat": "moat-v1"
+  },
+  "tickers": {
+    "HTZ": {
+      "cost": 0.0,
+      "devils_advocate": {
+        "evidence": [
+          "cash_runway_months",
+          "altman_z",
+          "interest_coverage",
+          "asset_floor.tbv",
+          "insiders_6mo.net_value",
+          "net_debt_ebitda"
+        ],
+        "impairment_type": "structural",
+        "leadership_status": "none found",
+        "score": 1.6,
+        "status": "ok"
+      },
+      "fixture_captured_on": "2026-09-27",
+      "list_price_cost": 0.142223,
+      "moat": {
+        "evidence": [
+          "gross_margin_by_fy.FY ending Dec 2024",
+          "roic_by_fy.FY ending Dec 2024",
+          "gross_margin_by_fy.FY ending Dec 2022",
+          "roic_ttm"
+        ],
+        "score": 2.3,
+        "sector_threat": "Fleet cost cycles and residual-value risk",
+        "status": "ok"
+      }
+    },
+    "JPM": {
+      "cost": 0.0,
+      "devils_advocate": {
+        "evidence": [
+          "dcf_implied_upside",
+          "asset_floor.coverage",
+          "insiders_6mo.net_value",
+          "beneish_flag",
+          "dividend.cut_years"
+        ],
+        "impairment_type": "cyclical",
+        "leadership_status": "none found",
+        "score": 4.5,
+        "status": "ok"
+      },
+      "fixture_captured_on": "2026-09-27",
+      "list_price_cost": 0.126643,
+      "moat": {
+        "evidence": [
+          "roe_by_fy.FY ending Dec 2022",
+          "roe_by_fy.FY ending Dec 2024",
+          "roe_ttm",
+          "return_on_assets_ttm"
+        ],
+        "score": 7.5,
+        "sector_threat": "Regulation and interest-rate-driven net interest margin compression",
+        "status": "ok"
+      }
+    },
+    "LCID": {
+      "cost": 0.0,
+      "devils_advocate": {
+        "evidence": [
+          "cash_runway_months",
+          "piotroski_accrual_check",
+          "altman_z",
+          "asset_floor.tbv",
+          "leadership.events"
+        ],
+        "impairment_type": "structural",
+        "leadership_status": "turnover found",
+        "score": 1.5,
+        "status": "ok"
+      },
+      "fixture_captured_on": "2026-09-27",
+      "list_price_cost": 0.062927,
+      "moat": {
+        "evidence": [
+          "gross_margin_ttm",
+          "roic_ttm",
+          "roic_by_fy"
+        ],
+        "score": 1.5,
+        "sector_threat": "EV price wars and scale disadvantage vs. Tesla/Chinese OEMs",
+        "status": "ok"
+      }
+    },
+    "LULU": {
+      "cost": 0.0,
+      "devils_advocate": {
+        "evidence": [
+          "estimate_revisions_90d",
+          "asset_floor.coverage",
+          "leadership.flag",
+          "short_interest",
+          "piotroski"
+        ],
+        "impairment_type": "cyclical",
+        "leadership_status": "turnover found",
+        "score": 5.5,
+        "status": "ok"
+      },
+      "fixture_captured_on": "2026-09-27",
+      "list_price_cost": 0.152505,
+      "moat": {
+        "evidence": [
+          "gross_margin_by_fy.FY ending Jan 2026",
+          "roic_by_fy.FY ending Jan 2026",
+          "gross_margin_by_fy.FY ending Jan 2022"
+        ],
+        "score": 6.5,
+        "sector_threat": "Brand erosion from athleisure challengers (Vuori, Alo Yoga) and private-label/DTC substitutes eroding premium pricing",
+        "status": "ok"
+      }
+    },
+    "MELI": {
+      "cost": 0.0,
+      "devils_advocate": {
+        "evidence": [
+          "asset_floor.coverage",
+          "debt_maturity_proxy",
+          "lenses.moat.risk",
+          "quant_confidence",
+          "insiders_6mo.net_value"
+        ],
+        "impairment_type": "cyclical",
+        "leadership_status": "none found",
+        "score": 5.5,
+        "status": "ok"
+      },
+      "fixture_captured_on": "2026-09-27",
+      "list_price_cost": 0.150298,
+      "moat": {
+        "evidence": [
+          "gross_margin_by_fy.FY ending Dec 2023",
+          "gross_margin_ttm",
+          "roic_by_fy.FY ending Dec 2024",
+          "roic_by_fy.FY ending Dec 2025"
+        ],
+        "score": 6.5,
+        "sector_threat": "Price competition and platform disintermediation from rivals (Amazon, Shopee, Shein/Temu) and payment/fintech competitors in LatAm e-commerce",
+        "status": "ok"
+      }
+    }
+  },
+  "total_cost": 0.0
+}

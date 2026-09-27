@@ -70,6 +70,22 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `ASSET_COVERAGE_BANDS` | ≥100% fully covered, 50–100% partly, 20–50% thin, <20% negligible | Asset coverage band |
 | `MONTHS_PER_YEAR` / `QUARTERS_PER_YEAR` | 12 / 4 | Unit constants for monthly runway burn and quarterly net-net burn |
 | `SCREEN_PROGRESS_POLL_SECONDS` | 5 | Screener page progress refresh |
+| `DCF_ADD_NET_CASH` | True | DCF bridge: fair value per share = (PV stage 1 + PV terminal + cash − debt) ÷ shares |
+| `REVERSE_DCF_TOLERANCE` / `REVERSE_DCF_MAX_ITERATIONS` | 1e-6 / 200 | Reverse-DCF bisection stopping rule |
+| Quant method for financials | Banks, insurers, other financials: fair P/B = ROE ÷ `COST_OF_CAPITAL` (zero-growth excess-return shortcut) × book value per share; the ROE spread replaces the ROIC adjustment. REITs: the same DCF on a TTM FFO base | Quant lens for sector-adjusted tickers (the reverse DCF and grid are n/m for the excess-return method) |
+| `QUANT_CONFIDENCE_NORMAL` / `QUANT_CONFIDENCE_LOW` | "normal" / "low" | Quant confidence labels (low on peak-earnings normalisation or a Graham/DCF disagreement) |
+| `ESTIMATE_REVISION_FLAT_BAND` / `ESTIMATE_REVISION_PERIODS` | 0.01 / `0y`, `+1y`, `0q` | EPS consensus now vs 90 days ago within ±1% → "flat"; eps_trend rows tried in order (context only) |
+| `LLM_PRICE_PER_MTOK_IN` / `_OUT` | 2.0 / 10.0 | `claude-sonnet-5` pricing per million tokens (checked 2026-09); update with the model |
+| `LLM_TEMPERATURE` / `LLM_NO_SAMPLING_MODEL_PREFIXES` | 0.0 / Sonnet 5, Opus 5, Opus 4.7/4.8, Fable, Mythos | Lowest temperature, sent only to models that accept sampling parameters (the listed ones reject `temperature`; the response cache keeps their scores stable) |
+| `LLM_EFFORT` / `LLM_MAX_TOKENS` / `LLM_TIMEOUT_SECONDS` | "medium" / 16000 / 300 | LLM request settings |
+| `LLM_VALIDATION_RETRIES` | 1 | One retry (with the validation error fed back) after a schema or evidence failure, then "Insufficient data" |
+| `LLM_MIN_EVIDENCE_FACTS` | 2 | Moat and Devil's Advocate must cite at least 2 payload fields |
+| `LLM_CACHE_DB_PATH` | `data/cache/llm_cache.db` | Permanent LLM response cache keyed by (ticker, lens, hash of model + payload, prompt version) |
+| `LEVERAGE_TREND_FLAT_BAND_FINANCIALS` | 1.0 | Macro leverage trend for financials and REITs (liabilities ÷ equity): ±1.0x is flat |
+| `DIVIDEND_EARNINGS_PAYOUT_MAX_FINANCIALS` | 1.0 | Dividend at risk for financials and REITs when earnings payout exceeds this (FCF payout is n/m for them) |
+| `LLM_BACKEND` | `auto` | `auto`: the Anthropic API when `ANTHROPIC_API_KEY` is set, else the Claude Code CLI (`claude -p`, Claude subscription); `api` / `claude_code` force one; `none` disables the LLM lenses |
+| `CLAUDE_CODE_CLI` / `CLAUDE_CODE_CLI_GLOBS` / `CLAUDE_CODE_TIMEOUT_SECONDS` | `.env` path, else `claude` on PATH, else the VS Code extension's bundled binary / 600 | Locating and running the CLI fallback; its calls log a billed cost of $0 plus the list-price equivalent |
+| `INDUSTRY_THREAT_HINTS` / `SECTOR_THREAT_HINTS` | e.g. Apparel Retail → brand / private-label erosion; Software → AI disruption; Banks → regulation and rates | Moat prompt: the sector-threat hint (industry prefix first, then sector) |
 
 
 ## Data sources and their limits
@@ -193,6 +209,7 @@ Computed in `/signals`, deterministic, following Rules 2, 2b and 3b (N/A vs n/m,
 - FCF payout = dividends paid ÷ raw TTM FCF. Above `DIVIDEND_FCF_PAYOUT_MAX` (1.0), or FCF ≤ 0 while paying, → "dividend at risk".
 - Earnings payout = dividends ÷ net income.
 - Years of uninterrupted payments, and any cuts (a year-over-year drop in the annual per-share total of more than `DIVIDEND_CUT_THRESHOLD`, 10%) in the available history.
+- Financials and REITs (FCF not meaningful, Rule 5): FCF payout is n/m; "dividend at risk" when the earnings payout exceeds `DIVIDEND_EARNINGS_PAYOUT_MAX_FINANCIALS` (1.0), or net income ≤ 0 while paying.
 
 **Context fields (never scored):** insider ownership %, short interest % of float, analyst estimates and revision direction.
 
@@ -287,7 +304,7 @@ Average of the sub-scores that have data (report which were used):
   - Highly cyclical → 3: `Energy`, `Basic Materials`.
   - `INDUSTRY_CYCLICALITY_OVERRIDES` take precedence, keyed on yfinance industry names: e.g. `Airlines`, `Auto Manufacturers`, `Auto Parts`, `Travel Services`, `Lodging`, `Resorts & Casinos`, `Steel`, `Oil & Gas E&P` → 3.
   - A sector or industry not in either table → 5, and it is logged so the tables can be extended.
-- Financials and REITs: the net debt/EBITDA and interest-coverage sub-scores are N/A; the lens uses trend and cyclicality only and is marked "reduced data".
+- Financials and REITs: the net debt/EBITDA and interest-coverage sub-scores are N/A; the lens uses trend and cyclicality only and is marked "reduced data". Their leverage trend is liabilities ÷ equity, with its own flat band `LEVERAGE_TREND_FLAT_BAND_FINANCIALS` (±1.0x), since bank balance sheets run near 10x.
 
 ### Business Moat (LLM)
 The prompt includes a fixed rubric (`MOAT_RUBRIC`, versioned with the prompt):
@@ -304,7 +321,7 @@ Score = how well the bull case survives the attack. Rubric (`DA_RUBRIC`, version
 Same evidence rule: at least 2 specific facts from the payload.
 
 ### Calibration
-- `tests/test_calibration.py`, marked `@pytest.mark.live` (calls the API; run on demand, not in the phase checklist): scores the golden tickers with the current prompts and saves the results to `tests/calibration/<prompt_version>.json`.
+- `tests/test_calibration.py`, marked `@pytest.mark.live` (calls the configured LLM backend: the API, or the Claude Code CLI without a key; run on demand, not in the phase checklist): scores the golden tickers with the current prompts and saves the results to `tests/calibration/<prompt_version>.json`.
 - It builds every LLM payload from the saved offline fixtures, never live data. Otherwise a new quarter's numbers would show up as a score shift and be blamed on the prompt. Only the prompt may differ between calibration runs.
 - When a Moat or Devil's Advocate prompt version changes, the test compares against the previous version's file and fails on any ticker whose score moved by more than `CALIBRATION_MAX_SHIFT` (2.0), listing each shift. A deliberate re-rating is accepted by committing the new file.
 

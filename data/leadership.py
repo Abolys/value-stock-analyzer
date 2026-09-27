@@ -55,6 +55,7 @@ class LLMConfirmation(BaseModel):
     role: str | None = None
     person: str | None = None
     effective_date: date | None = None
+    note: str = ""
 
 
 class FilingDoc(BaseModel):
@@ -244,17 +245,14 @@ def keyword_hits(text: str, descriptions: list[str] | None = None) -> list[str]:
     return hits
 
 
-# ============================ PHASE 3 STUB ================================
 def confirm_departure_llm(doc: FilingDoc, ticker: str) -> LLMConfirmation:
-    """PHASE 3 STUB — the LLM confirmation of a 6-K keyword hit.
+    """The LLM confirmation of a 6-K keyword hit (llm/departure.py): JSON
+    {departure, role, person, effective_date}, cached by accession number, with
+    the filing text inside a delimited <filing_text> data block. Without an API
+    key every hit stays "unconfirmed" and is never counted."""
+    from llm.departure import default_confirm
 
-    Phase 3 replaces this with an Anthropic call returning JSON
-    {departure, role, person, effective_date}, cached by accession number,
-    with the filing text inside a delimited <filing_text> data block.
-    Until then every keyword hit stays "unconfirmed" and is never counted.
-    """
-    return LLMConfirmation(status="unconfirmed")
-# ==========================================================================
+    return default_confirm(doc, ticker)
 
 
 def layer_6k(ticker: str, docs: list[FilingDoc], start: date, today: date,
@@ -274,7 +272,7 @@ def layer_6k(ticker: str, docs: list[FilingDoc], start: date, today: date,
                 layer=LAYER_6K, detail=f"6-K keywords: {', '.join(hits)}", accession=d.accession))
         elif c.status == "unconfirmed":
             layer.candidates.append({"accession": d.accession, "filing_date": d.filing_date.isoformat(),
-                                     "keywords": hits, "status": "unconfirmed"})
+                                     "keywords": hits, "status": "unconfirmed", "note": c.note})
     return layer
 
 

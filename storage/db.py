@@ -1,6 +1,7 @@
 """SQLite app database (runs.db). Phase 1 created officer_snapshots; Phase 2
 adds the screen_runs / screen_results / screen_divergences tables (helpers in
-storage/screen_store.py); later phases add run history and portfolio tables.
+storage/screen_store.py); Phase 3 adds analysis_runs and llm_calls (helpers in
+storage/llm_store.py); later phases add portfolio tables.
 """
 
 from __future__ import annotations
@@ -69,13 +70,50 @@ CREATE TABLE IF NOT EXISTS screen_divergences (
     stage2 REAL,
     rel_diff REAL
 );
+CREATE TABLE IF NOT EXISTS analysis_runs (
+    analysis_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    finished_at TEXT,
+    aggregate_score REAL,
+    verdict TEXT,
+    total_cost REAL DEFAULT 0,
+    result_json TEXT              -- AnalysisRun model dump
+);
+CREATE TABLE IF NOT EXISTS llm_calls (
+    call_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    analysis_id INTEGER,          -- NULL for calls outside an analysis (e.g. a 6-K check in a screen)
+    ticker TEXT NOT NULL,
+    lens TEXT NOT NULL,           -- moat | devils_advocate | departure
+    model TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cost REAL NOT NULL,           -- billed API cost ($0 on the Claude Code subscription backend)
+    cache_hit INTEGER NOT NULL,
+    attempt INTEGER NOT NULL,
+    outcome TEXT NOT NULL,        -- ok | invalid: <reason> | error: <reason>
+    created_at TEXT NOT NULL,
+    backend TEXT NOT NULL DEFAULT 'api',     -- api | claude_code
+    list_price_cost REAL NOT NULL DEFAULT 0  -- estimated cost at API list prices
+);
 """
+
+
+# Columns added after a table was first created: (table, column, definition).
+MIGRATIONS = [
+    ("llm_calls", "backend", "TEXT NOT NULL DEFAULT 'api'"),
+    ("llm_calls", "list_price_cost", "REAL NOT NULL DEFAULT 0"),
+]
 
 
 def connect(path: Path | str = config.RUNS_DB_PATH) -> sqlite3.Connection:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
+    for table, column, definition in MIGRATIONS:
+        if column not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
     return conn
 
 

@@ -52,6 +52,9 @@ STAGE1_GROWTH_CAP = 0.15
 STAGE1_GROWTH_FLOOR = -0.05
 DCF_STAGE1_YEARS = 5
 DCF_BASE_YEARS = 3
+# Fair value per share = (PV of stage-1 FCF + PV of terminal value + cash − debt) / shares.
+# False → the cash − debt bridge is left out (levered FCF treated as fully net of debt).
+DCF_ADD_NET_CASH = True
 # FCF_NEGATIVE_RULE: negative FCF in a majority of the available fiscal years
 # (up to the last FCF_NEGATIVE_MAX_YEARS), with at least FCF_NEGATIVE_MIN_YEARS.
 FCF_NEGATIVE_MAX_YEARS = 4
@@ -127,6 +130,13 @@ PIOTROSKI_ADJUSTMENT = {"strong": 0.5, "weak": -1.0}
 RUNWAY_BREAKPOINTS = [(0, 1), (12, 3), (24, 4), (36, 5)]
 RUNWAY_SCORE_CAP = 5.0
 
+# Quant lens confidence (SPEC "Score mapping"): "low" when peak earnings are
+# normalised or the Graham Number and the DCF disagree on direction.
+QUANT_CONFIDENCE_NORMAL = "normal"
+QUANT_CONFIDENCE_LOW = "low"
+# Financials (banks, insurers, other): excess-return shortcut, fair P/B = ROE / COST_OF_CAPITAL
+# (zero growth); the ROE spread replaces the ROIC bonus/penalty. REITs: the DCF on an FFO base.
+
 # --------------------------------------------------------------------------
 # Score mapping — Macro lens
 # --------------------------------------------------------------------------
@@ -136,7 +146,10 @@ NO_INTEREST_EXPENSE_SCORE = 10.0  # only when EBIT > 0 (Rule 2b)
 EBIT_NONPOSITIVE_COVERAGE_SCORE = 1.0
 ALTMAN_BREAKPOINTS = [(0.0, 1), (1.1, 3), (2.6, 7), (4.0, 10)]
 LEVERAGE_TREND_SCORES = {"falling": 8, "flat": 5, "rising": 2}
-LEVERAGE_TREND_FLAT_BAND = 0.3  # ±0.3x counts as flat
+LEVERAGE_TREND_FLAT_BAND = 0.3  # ±0.3x counts as flat (net debt / EBITDA)
+# Financials and REITs: the trend is on liabilities / equity, which runs ~10x for banks,
+# so ±0.3x would call a 3% move a trend; ±1.0x is flat instead.
+LEVERAGE_TREND_FLAT_BAND_FINANCIALS = 1.0
 
 CYCLICALITY_SCORES = {"defensive": 8, "mixed": 5, "cyclical": 3}
 CYCLICALITY_DEFAULT_SCORE = 5
@@ -180,9 +193,77 @@ DA_RUBRIC = {
 }
 LLM_MIN_EVIDENCE_FACTS = 2
 CALIBRATION_MAX_SHIFT = 2.0
-# Per-million-token prices; check against current Anthropic pricing in Phase 3.
-LLM_PRICE_PER_MTOK_IN = 3.0
-LLM_PRICE_PER_MTOK_OUT = 15.0
+# Per-million-token prices for ANTHROPIC_MODEL (claude-sonnet-5: $2 in / $10 out,
+# checked against Anthropic pricing 2026-09). Update when the model changes.
+LLM_PRICE_PER_MTOK_IN = 2.0
+LLM_PRICE_PER_MTOK_OUT = 10.0
+TOKENS_PER_MTOK = 1_000_000  # unit constant
+# Lowest temperature, sent only to models that accept sampling parameters.
+# Models matching these prefixes reject `temperature` with a 400, so it is omitted;
+# repeatability then rests on the response cache (same payload → same cached answer).
+LLM_TEMPERATURE = 0.0
+LLM_NO_SAMPLING_MODEL_PREFIXES = ("claude-sonnet-5", "claude-opus-5", "claude-opus-4-7", "claude-opus-4-8",
+                                  "claude-fable", "claude-mythos")
+LLM_EFFORT = "medium"  # output_config.effort for the scoring calls; None omits it (models without effort)
+LLM_MAX_TOKENS = 16000
+LLM_VALIDATION_RETRIES = 1  # one retry after a schema / evidence failure, then "Insufficient data"
+LLM_TIMEOUT_SECONDS = 300
+LLM_CACHE_DB_PATH = DATA_DIR / "cache" / "llm_cache.db"
+
+# LLM backend (CLAUDE.md Rule 4). "auto": the Anthropic API when ANTHROPIC_API_KEY is set,
+# otherwise the Claude Code CLI (`claude -p`, the user's Claude subscription) when it can be
+# found. "api" / "claude_code" force one; "none" disables the LLM lenses.
+LLM_BACKEND = os.getenv("LLM_BACKEND", "auto").strip().lower() or "auto"
+LLM_BACKENDS = ("auto", "api", "claude_code", "none")
+# The CLI: CLAUDE_CODE_CLI in .env wins; else `claude` on PATH; else these globs (newest match),
+# which cover the binary bundled with the VS Code extension (including Flatpak VS Code).
+CLAUDE_CODE_CLI = os.getenv("CLAUDE_CODE_CLI", "")
+CLAUDE_CODE_CLI_GLOBS = [
+    "~/.local/bin/claude",
+    "~/.claude/local/claude",
+    "~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude",
+    "~/.var/app/com.visualstudio.code/data/vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude",
+]
+CLAUDE_CODE_TIMEOUT_SECONDS = 600  # one structured call, including the CLI's own start-up
+
+# Moat lens: the prompt first names the single most relevant threat for the business.
+# Hints are matched on the yfinance industry by prefix first, then on the sector.
+INDUSTRY_THREAT_HINTS = {
+    "Software": "AI disruption (AI-native competitors or AI features commoditising the product)",
+    "Information Technology Services": "AI disruption (automation of billable services work)",
+    "Internet Content": "AI disruption of search, content and advertising",
+    "Apparel Retail": "brand erosion and private-label or direct-to-consumer competition",
+    "Apparel Manufacturing": "brand erosion and private-label competition",
+    "Internet Retail": "price competition and platform disintermediation",
+    "Department Stores": "private-label erosion and the shift to online retail",
+    "Discount Stores": "private-label and price competition",
+    "Grocery Stores": "private-label erosion and price competition",
+    "Specialty Retail": "brand erosion and private-label or online competition",
+    "Packaged Foods": "private-label erosion and GLP-1 driven changes in demand",
+    "Beverages": "private-label erosion and changing consumer health preferences",
+    "Banks": "regulation and interest-rate compression of net interest margins",
+    "Insurance": "catastrophe losses, pricing cycles and regulation",
+    "Asset Management": "fee compression and the shift to passive products",
+    "Auto Manufacturers": "EV transition costs and price competition",
+    "Airlines": "fuel costs, capacity cycles and price competition",
+    "Rental & Leasing Services": "fleet cost cycles and residual-value risk",
+    "Railroads": "volume cyclicality and regulation of pricing",
+    "Gold": "commodity price cycles and reserve depletion",
+    "REIT": "interest rates, refinancing costs and tenant demand",
+}
+SECTOR_THREAT_HINTS = {
+    "Technology": "AI disruption",
+    "Communication Services": "AI disruption and shifting advertising and content consumption",
+    "Consumer Cyclical": "brand erosion, private-label or online competition, and demand cyclicality",
+    "Consumer Defensive": "private-label erosion and price competition",
+    "Financial Services": "regulation and interest rates",
+    "Real Estate": "interest rates and tenant demand",
+    "Healthcare": "drug-pricing regulation, patent expiries and reimbursement pressure",
+    "Industrials": "demand cyclicality and input-cost pressure",
+    "Energy": "commodity price cycles and the energy transition",
+    "Basic Materials": "commodity price cycles",
+    "Utilities": "rate regulation and interest rates",
+}
 
 # --------------------------------------------------------------------------
 # Turnaround
@@ -300,6 +381,8 @@ ALTMAN_ZONES = {"distress_below": 1.10, "safe_above": 2.60}
 ALTMAN_COEFFICIENTS = {"X1": 6.56, "X2": 3.26, "X3": 6.72, "X4": 1.05}
 BENEISH_THRESHOLD = -1.78
 REVERSE_DCF_SEARCH_RANGE = (-0.30, 0.50)
+REVERSE_DCF_TOLERANCE = 1e-6  # bisection stops when the growth bracket is this narrow
+REVERSE_DCF_MAX_ITERATIONS = 200
 SENSITIVITY_RATE_STEPS = [-0.02, -0.01, 0.0, 0.01, 0.02]
 SENSITIVITY_GROWTH_STEPS = [-0.05, -0.025, 0.0, 0.025, 0.05]
 USE_EARNINGS_YIELD_IN_SCREEN = False
@@ -324,6 +407,12 @@ INSIDER_CLUSTER_MIN = 3
 INSIDER_CLUSTER_DAYS = 90
 DIVIDEND_FCF_PAYOUT_MAX = 1.0
 DIVIDEND_CUT_THRESHOLD = 0.10
+# Financials and REITs: FCF is not meaningful (Rule 5), so dividend safety uses the earnings
+# payout instead — above this (or net income ≤ 0 while paying) → "dividend at risk".
+DIVIDEND_EARNINGS_PAYOUT_MAX_FINANCIALS = 1.0
+# Estimate revisions (context only): EPS consensus now vs 90 days ago; within ±1% → "flat".
+ESTIMATE_REVISION_FLAT_BAND = 0.01
+ESTIMATE_REVISION_PERIODS = ["0y", "+1y", "0q"]  # eps_trend rows tried in order
 
 # --------------------------------------------------------------------------
 # Portfolio (Phase 6)

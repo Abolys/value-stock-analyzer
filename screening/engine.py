@@ -19,7 +19,7 @@ from typing import Callable
 import config
 from data import corporate_actions as ca
 from data import currency, periods, prices, sector
-from data.fundamentals import load_fundamentals
+from data.fundamentals import Fundamentals, load_fundamentals
 from data.provider import DataProvider, EarningsDates, InfoResult, ProviderError
 from data.risk_free import fetch_boc_valet, risk_free_for
 from data.shares import ShareTrend, share_trend
@@ -110,16 +110,23 @@ def stage1_cut_result(ticker: str, sources: str, info: InfoResult, route, s1, pr
 
 def screen_ticker(ctx: ScreenContext, ticker: str, sources: str = "", price: Datum | None = None,
                   force_stage2: bool = False) -> ScreenResult:
+    return screen_ticker_full(ctx, ticker, sources, price, force_stage2)[0]
+
+
+def screen_ticker_full(ctx: ScreenContext, ticker: str, sources: str = "", price: Datum | None = None,
+                       force_stage2: bool = False) -> tuple[ScreenResult, Fundamentals | None, InfoResult | None]:
+    """The screen result plus the fetched statements and info (None where not fetched),
+    so per-ticker analysis reuses them instead of fetching twice."""
     try:
         info = ctx.provider.get_info(ticker)
     except ProviderError as exc:
-        return failed_to_load(ticker, sources, f"info: {exc}")
+        return failed_to_load(ticker, sources, f"info: {exc}"), None, None
     if ctx.save_snapshots:
         save_officer_snapshot(ticker, info, when=ctx.today, path=ctx.db_path)
     if price is None:
         price = prices.actual_latest_price(ctx.provider, ticker)
     if not price.ok:
-        return failed_to_load(ticker, sources, f"price: {price.status}")
+        return failed_to_load(ticker, sources, f"price: {price.status}"), None, info
     price = price.model_copy(update={"currency": info.get("currency")})
     route = sector.route(info)
     info_values = stage1_info_values(ctx, info)
@@ -127,11 +134,11 @@ def screen_ticker(ctx: ScreenContext, ticker: str, sources: str = "", price: Dat
     s1 = stage1(info_values, price, rf, route, ticker)
     earnings = _earnings(ctx, ticker)
     if not s1.survives and not force_stage2:
-        return stage1_cut_result(ticker, sources, info, route, s1, price, earnings, ctx.today)
+        return stage1_cut_result(ticker, sources, info, route, s1, price, earnings, ctx.today), None, info
     try:
         f = load_fundamentals(ctx.provider, info, ticker)
     except ProviderError as exc:
-        return failed_to_load(ticker, sources, f"statements: {exc}")
+        return failed_to_load(ticker, sources, f"statements: {exc}"), None, info
     f.earnings = earnings
     trend = adjusted_share_trend(ctx, ticker)
     res = evaluate(ticker, info, info_values, route, f, trend, price, rf, ctx.today, stage1=s1,
@@ -139,7 +146,7 @@ def screen_ticker(ctx: ScreenContext, ticker: str, sources: str = "", price: Dat
     if force_stage2 and not s1.survives:
         res.notes.append("stage 1 would have cut this ticker (" + "; ".join(s1.cut_reasons)
                          + "); analysed in full because it was entered manually")
-    return res
+    return res, f, info
 
 
 def analyse_manual(ctx: ScreenContext, ticker: str) -> ScreenResult:
