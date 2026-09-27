@@ -1,5 +1,6 @@
-"""SQLite app database (runs.db). Phase 1 creates the officer_snapshots table;
-later phases add run history, screen results and portfolio tables here.
+"""SQLite app database (runs.db). Phase 1 created officer_snapshots; Phase 2
+adds the screen_runs / screen_results / screen_divergences tables (helpers in
+storage/screen_store.py); later phases add run history and portfolio tables.
 """
 
 from __future__ import annotations
@@ -24,6 +25,49 @@ CREATE TABLE IF NOT EXISTS officer_snapshots (
     officers_json TEXT NOT NULL,
     source TEXT,
     PRIMARY KEY (ticker, snapshot_date)
+);
+CREATE TABLE IF NOT EXISTS screen_runs (
+    run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    lists TEXT NOT NULL,              -- JSON list of universe list keys
+    status TEXT NOT NULL,             -- running | completed | blocked: health check failed | stopped: source failing
+    health_failures TEXT,             -- JSON list
+    total INTEGER DEFAULT 0,
+    attempted INTEGER DEFAULT 0,
+    passed_stage1 INTEGER DEFAULT 0,
+    passed_stage2 INTEGER DEFAULT 0,
+    failed_to_load INTEGER DEFAULT 0,
+    refetched_reported INTEGER DEFAULT 0,
+    served_from_cache INTEGER DEFAULT 0,
+    field_na TEXT,                    -- JSON {field: {"na": n, "of": m}}
+    flagged_fields TEXT,              -- JSON list of "likely renamed upstream" fields
+    pid INTEGER,
+    log_path TEXT,
+    note TEXT
+);
+CREATE TABLE IF NOT EXISTS screen_results (
+    run_id INTEGER NOT NULL,
+    ticker TEXT NOT NULL,
+    sources TEXT,
+    status TEXT NOT NULL,
+    decided_at_stage INTEGER,
+    load_error TEXT,
+    quality REAL,
+    earnings_yield REAL,
+    stale INTEGER,
+    fundamentals_as_of TEXT,
+    result_json TEXT NOT NULL,
+    written_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, ticker)
+);
+CREATE TABLE IF NOT EXISTS screen_divergences (
+    run_id INTEGER NOT NULL,
+    ticker TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    stage1 REAL,
+    stage2 REAL,
+    rel_diff REAL
 );
 """
 

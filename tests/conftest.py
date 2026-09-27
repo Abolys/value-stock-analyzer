@@ -20,6 +20,14 @@ HANDMADE = ROOT / "tests" / "fixtures" / "handmade"
 
 
 @pytest.fixture(autouse=True)
+def _temp_runs_db(monkeypatch, tmp_path):
+    """Code that reads config.RUNS_DB_PATH at call time (the app) never touches the real runs.db in tests."""
+    import config
+
+    monkeypatch.setattr(config, "RUNS_DB_PATH", tmp_path / "app_runs.db")
+
+
+@pytest.fixture(autouse=True)
 def _no_network(monkeypatch, request):
     if request.node.get_closest_marker("live"):
         return

@@ -39,3 +39,6 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
+
+# Screen run logs
+storage/logs/

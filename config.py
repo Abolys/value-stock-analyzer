@@ -67,9 +67,24 @@ MAX_NET_DEBT_EBITDA = 3.0
 MAX_SHARE_GROWTH_PER_YEAR = 0.0
 DILUTION_FLAG_PER_YEAR = 0.03
 MIN_CASH_RUNWAY_MONTHS = 24
-STAGE1_SLACK = 0.25
+STAGE1_SLACK = 0.25  # loosens the hurdle each stage-1 metric is compared against
 STAGE_DIVERGENCE = 0.30
 SCATTER_LABEL_TOP_N = 10
+GRAHAM_MULTIPLIER = 22.5  # Graham Number = sqrt(22.5 × EPS × BVPS) (15× earnings × 1.5× book)
+MONTHS_PER_YEAR = 12  # unit constant: monthly burn = annual burn / 12
+QUARTERS_PER_YEAR = 4  # unit constant: quarterly burn = TTM burn / 4
+
+# Sector-adjusted screen slots (Financial Services / Real Estate, Rule 5).
+# Slot "fcf" → ROE spread (banks, insurers, other) or FFO yield vs risk-free (REITs);
+# slot "leverage" → P/TBV (banks), P/B (insurers, other), not applicable (REITs).
+MIN_ROE_SPREAD = 0.0  # ROE − COST_OF_CAPITAL must be at least this
+MAX_P_TBV_BANK = 1.5
+MAX_P_B = 1.5
+
+# NOPAT for ROIC: effective tax rate (tax provision / pretax income) clamped to
+# TAX_RATE_BOUNDS; when it is n/m (pretax ≤ 0 or missing) the fallback is used and labelled.
+STATUTORY_TAX_RATE_FALLBACK = 0.21
+TAX_RATE_BOUNDS = (0.0, 0.5)
 
 # Risk-free 10-year yield per trading currency. "scale" converts the quoted
 # number to a decimal: ^TNX is quoted in percent (5.18 == 5.18%, verified
@@ -239,6 +254,8 @@ BATCH_PRICE_CHUNK_SIZE = 100
 PRICE_HISTORY_PERIOD = "10y"
 EDGAR_MAX_REQUESTS_PER_SECOND = 10
 HEALTH_CHECK_TTL_MINUTES = 60
+SCREEN_PROGRESS_POLL_SECONDS = 5  # the Screener page re-reads run progress this often
+SCREEN_LOG_DIR = ROOT / "storage" / "logs"
 
 # --------------------------------------------------------------------------
 # Periods and staleness (Rule 3b)
@@ -278,12 +295,28 @@ PIOTROSKI_MIN_CHECKS = 7
 PIOTROSKI_STRONG = 7
 PIOTROSKI_WEAK = 3
 ALTMAN_ZONES = {"distress_below": 1.10, "safe_above": 2.60}
+# Altman Z'' (non-manufacturer / emerging-market model, Altman 1995):
+# X1 working capital/TA, X2 retained earnings/TA, X3 EBIT/TA, X4 book equity/total liabilities.
+ALTMAN_COEFFICIENTS = {"X1": 6.56, "X2": 3.26, "X3": 6.72, "X4": 1.05}
 BENEISH_THRESHOLD = -1.78
 REVERSE_DCF_SEARCH_RANGE = (-0.30, 0.50)
 SENSITIVITY_RATE_STEPS = [-0.02, -0.01, 0.0, 0.01, 0.02]
 SENSITIVITY_GROWTH_STEPS = [-0.05, -0.025, 0.0, 0.025, 0.05]
 USE_EARNINGS_YIELD_IN_SCREEN = False
 MIN_EARNINGS_YIELD = 0.08
+MIN_METRICS_FOR_PASS_WITH_EARNINGS_YIELD = 4  # "4 of 5" when the earnings yield is a screen metric
+# Beneish (1999), "The Detection of Earnings Manipulation", Financial Analysts
+# Journal 55(5), 8-variable model coefficients.
+BENEISH_COEFFICIENTS = {
+    "intercept": -4.84, "DSRI": 0.920, "GMI": 0.528, "AQI": 0.404, "SGI": 0.892,
+    "DEPI": 0.115, "SGAI": -0.172, "TATA": 4.679, "LVGI": -0.327,
+}
+# Asset floor (information only; never changes a score or the screen status).
+NNWC_RECEIVABLES_WEIGHT = 0.75
+NNWC_INVENTORY_WEIGHT = 0.5
+# Asset coverage = TBV / market cap; (lower bound inclusive, band), checked from the top.
+ASSET_COVERAGE_BANDS = [(1.0, "fully covered"), (0.5, "partly covered"), (0.2, "thin"),
+                        (float("-inf"), "negligible")]
 TRAP_RISK_FAILS_SCREEN = False
 PEAK_MARGIN_RATIO = 1.5
 INSIDER_LOOKBACK_MONTHS = 6

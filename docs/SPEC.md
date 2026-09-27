@@ -57,6 +57,19 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `QUARTER_GAP_DAYS` | 80–100 | Consecutive quarters for the TTM sum must be this far apart; otherwise the latest fiscal year is used ("annual, not TTM") |
 | `HEALTH_CHECK_TTL_MINUTES` | 60 | A health-check result is reused this long at app start |
 | `RISK_FREE_QUOTE_RANGE` | 0–20 | Sanity range for a quoted 10-year yield in percent (`^TNX` is quoted in percent, verified 2026-09) |
+| `GRAHAM_MULTIPLIER` | 22.5 | Graham Number = √(22.5 × EPS × book value per share) |
+| `STAGE1_SLACK` (how it applies) | hurdle × (1 − 0.25), ceiling × (1 + 0.25) | Stage 1 loosens what each metric is compared against: Graham ≥ price × (1 + `MIN_MARGIN_OF_SAFETY`) × 0.75; FCF yield ≥ (10-year + spread) × 0.75; net debt/EBITDA ≤ 3.0 × 1.25; negative info FCF → estimated runway ≥ 24 × 0.75 months |
+| `MIN_ROE_SPREAD` | 0.0 | Sector-adjusted screen (banks, insurers, other financials): ROE − `COST_OF_CAPITAL` must be at least this |
+| `MAX_P_TBV_BANK` / `MAX_P_B` | 1.5 / 1.5 | Sector-adjusted valuation slot: banks on price to tangible book, insurers and other financials on price to book. REITs use FFO yield vs the 10-year yield in the FCF slot and have no book slot |
+| SBC not reported | raw FCF, labelled | When the cash-flow statement has no stock-based-comp row, the FCF yield uses raw FCF and is labelled "SBC not reported; unadjusted FCF yield" |
+| `STATUTORY_TAX_RATE_FALLBACK` / `TAX_RATE_BOUNDS` | 0.21 / 0–50% | NOPAT for ROIC: effective tax rate clamped to the bounds; fallback rate (labelled) when the effective rate is n/m |
+| `MIN_METRICS_FOR_PASS_WITH_EARNINGS_YIELD` | 4 | Replaces `MIN_METRICS_FOR_PASS` when `USE_EARNINGS_YIELD_IN_SCREEN` is on (4 of 5) |
+| `BENEISH_COEFFICIENTS` | Beneish (1999) 8-variable model | M-score coefficients |
+| `ALTMAN_COEFFICIENTS` | X1 6.56, X2 3.26, X3 6.72, X4 1.05 | Altman Z'' coefficients (zones in `ALTMAN_ZONES`) |
+| `NNWC_RECEIVABLES_WEIGHT` / `NNWC_INVENTORY_WEIGHT` | 0.75 / 0.5 | Net-net working capital |
+| `ASSET_COVERAGE_BANDS` | ≥100% fully covered, 50–100% partly, 20–50% thin, <20% negligible | Asset coverage band |
+| `MONTHS_PER_YEAR` / `QUARTERS_PER_YEAR` | 12 / 4 | Unit constants for monthly runway burn and quarterly net-net burn |
+| `SCREEN_PROGRESS_POLL_SECONDS` | 5 | Screener page progress refresh |
 
 
 ## Data sources and their limits

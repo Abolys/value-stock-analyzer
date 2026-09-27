@@ -1,8 +1,11 @@
-"""Value Stock Analyzer — Phase 1 shell.
+"""Value Stock Analyzer — plain shell (styling arrives in Phase 5).
 
-A sidebar with a ticker input and a "Run screener" option, and a page showing
-the raw provider output for a ticker with every value's period, provider and
-N/A reason. Later phases replace this with the real views.
+- Ticker page: the raw provider output with every value's period, provider and
+  N/A reason, plus the screen metrics for that ticker (information only:
+  manual tickers bypass the screen).
+- Screener page: the latest completed screen run with its summary and a
+  sortable results table; "Run new screen" launches scripts/run_screen.py in
+  the background and shows its progress from the database.
 
     streamlit run app/main.py
 """
@@ -31,6 +34,10 @@ from data.provider import ProviderError  # noqa: E402
 from data.risk_free import risk_free_for  # noqa: E402
 from data.universe import list_labels, load_list  # noqa: E402
 from data.values import Datum  # noqa: E402
+from app import screen_jobs  # noqa: E402
+from screening.engine import ScreenContext, analyse_manual  # noqa: E402
+from screening.table import result_row  # noqa: E402
+from storage import screen_store as store  # noqa: E402
 
 INCOME_FLOWS = ["total_revenue", "gross_profit", "operating_income", "ebit", "ebitda", "net_income", "interest_expense"]
 CASHFLOW_FLOWS = ["operating_cash_flow", "capital_expenditure", "free_cash_flow", "stock_based_compensation",
@@ -143,6 +150,17 @@ def ticker_page(provider, ticker: str) -> None:
     except ProviderError as exc:
         st.warning(f"Price/share history unavailable: {exc}")
 
+    st.subheader("Screen metrics (information only — manual tickers bypass the screen)")
+    ctx = ScreenContext(provider=provider, db_path=config.RUNS_DB_PATH, today=date.today(),
+                        valet_fetch=services.valet_fetch())
+    result = analyse_manual(ctx, ticker)
+    if result.status == "failed to load":
+        st.warning(f"Screen metrics unavailable: {result.load_error}")
+    else:
+        st.write(f"**Screen status:** {result.display_status} · **Quality:** "
+                 f"{result.quality.display if result.quality else 'N/A'}")
+        st.markdown(result.rationale)
+
     with st.expander("Statements (canonical fields)"):
         for (kind, freq), stmt in stmts.items():
             st.markdown(f"**{kind} · {freq}** — provider {stmt.provider}; "
@@ -188,16 +206,101 @@ def ticker_page(provider, ticker: str) -> None:
         st.json(info.raw, expanded=False)
 
 
+def run_summary(run: store.ScreenRun) -> None:
+    labels = list_labels()
+    st.write(f"**Run {run.run_id}** · {run.status} · started {run.started_at:%Y-%m-%d %H:%M}"
+             + (f", ended {run.ended_at:%Y-%m-%d %H:%M}" if run.ended_at else "")
+             + f" · lists: {', '.join(labels.get(k, k) for k in run.lists)}")
+    cols = st.columns(6)
+    cols[0].metric("Tickers", run.total)
+    cols[1].metric("Attempted", run.attempted)
+    cols[2].metric("Passed stage 1", run.passed_stage1)
+    cols[3].metric("Pass (stage 2)", run.passed_stage2)
+    cols[4].metric("Failed to load", run.failed_to_load)
+    cols[5].metric("Refetched (reported)", run.refetched_reported)
+    st.caption(f"{run.refetched_reported} tickers refetched because they reported since the last fetch; "
+               f"{run.served_from_cache} served from cache. Failed to load is never counted as a Fail.")
+    if run.flagged_fields:
+        st.warning("Fields N/A for more than "
+                   f"{config.FIELD_NA_SPIKE:.0%} of tickers — likely renamed upstream: " + ", ".join(run.flagged_fields))
+    if run.note:
+        st.caption(run.note)
+
+
+@st.fragment(run_every=config.SCREEN_PROGRESS_POLL_SECONDS)
+def run_progress() -> None:
+    run = screen_jobs.active_run(config.RUNS_DB_PATH)
+    if run is None:
+        return
+    done = run.attempted
+    st.info(f"Screen run {run.run_id} in progress: {done} of {run.total} tickers "
+            f"({run.passed_stage1} passed stage 1, {run.failed_to_load} failed to load).")
+    st.progress(done / run.total if run.total else 0.0)
+
+
 def screener_page() -> None:
     st.header("Screener")
-    st.info("The value screener arrives in Phase 2. Universe lists available now:")
+    labels = list_labels()
     rows = []
-    for key, label in list_labels().items():
+    for key, label in labels.items():
         df = load_list(key)
-        rows.append({"list": label, "file": f"{key}.csv", "tickers": len(df),
+        rows.append({"list": label, "key": key, "tickers": len(df),
                      "as of": ", ".join(sorted(set(df["as_of"]))) if len(df) else "empty"})
-    st.dataframe(pd.DataFrame(rows), hide_index=True)
-    st.caption("Refresh with `python scripts/refresh_universe.py`; failed downloads keep the previous list.")
+    with st.expander("Universe lists"):
+        st.dataframe(pd.DataFrame(rows), hide_index=True)
+        st.caption("Refresh with `python scripts/refresh_universe.py`; failed downloads keep the previous list.")
+
+    chosen = st.multiselect("Lists to screen", list(labels), default=["cowz"], format_func=labels.get)
+    db = config.RUNS_DB_PATH
+    busy = screen_jobs.active_run(db) is not None
+    if st.button("Run new screen", disabled=busy or not chosen):
+        try:
+            log = screen_jobs.launch(chosen, db_path=db)
+            st.success(f"Screen started in the background (log: {log}).")
+        except RuntimeError as exc:
+            st.warning(str(exc))
+    run_progress()
+
+    paused = screen_jobs.interrupted_run(db)
+    if paused and not busy:
+        st.warning(f"Run {paused.run_id} is '{paused.status}' after {paused.attempted} of {paused.total} tickers. "
+                   f"{paused.note or ''} Continue with `python scripts/run_screen.py --resume`.")
+        if st.button("Resume run"):
+            screen_jobs.launch(resume=True, db_path=db)
+            st.rerun()
+    last = store.latest_run(db)
+    if last and last.status == store.BLOCKED:
+        st.error(f"Run {last.run_id} was blocked: health check failed — " + "; ".join(last.health_failures))
+
+    run = store.latest_completed_run(db)
+    if run is None:
+        st.info("No completed screen run yet.")
+        return
+    st.subheader("Latest completed run")
+    run_summary(run)
+    results = store.load_results(run.run_id, db)
+    table = pd.DataFrame([result_row(r) for r in results])
+    statuses = sorted(table["status"].unique()) if len(table) else []
+    shown = st.multiselect("Status", statuses, default=statuses)
+    st.dataframe(table[table["status"].isin(shown)], hide_index=True, width="stretch")
+    st.caption("Metric cells show the value and outcome, or the N/A / n/m reason. n/m counts as failing; "
+               "N/A counts as unavailable. Trap-risk and asset-floor flags are shown, not scored.")
+
+    failed = [r for r in results if r.status == "failed to load"]
+    if failed:
+        with st.expander(f"Failed to load ({len(failed)})"):
+            st.dataframe(pd.DataFrame([{"ticker": r.ticker, "reason": r.load_error} for r in failed]), hide_index=True)
+    div = store.load_divergences(run.run_id, db)
+    if div:
+        with st.expander(f"Stage-1 / stage-2 divergences ({len(div)})"):
+            st.dataframe(pd.DataFrame(div), hide_index=True)
+    if run.field_na:
+        with st.expander("Per-field N/A counts"):
+            st.dataframe(pd.DataFrame([{"field": k, "N/A": v["na"], "of": v["of"]} for k, v in run.field_na.items()]),
+                         hide_index=True)
+    pick = st.selectbox("Rationale for", [r.ticker for r in results if r.rationale])
+    if pick:
+        st.markdown(next(r.rationale for r in results if r.ticker == pick))
 
 
 def main() -> None:
@@ -206,12 +309,12 @@ def main() -> None:
     with st.sidebar:
         st.title("Value Stock Analyzer")
         ticker = st.text_input("Ticker", key="ticker").strip().upper()
-        page = st.radio("Page", ["Ticker data", "Run screener"], key="page")
+        page = st.radio("Page", ["Ticker data", "Screener"], key="page")
         st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
     if not report.ok:
         st.error(BANNER + "\n\n" + "\n".join(f"- {f}" for f in report.failures)
                  + "\n\nCached data is still shown, with its age.")
-    if page == "Run screener":
+    if page == "Screener":
         screener_page()
     elif ticker:
         ticker_page(provider, ticker)
