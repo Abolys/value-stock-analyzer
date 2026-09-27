@@ -31,6 +31,18 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `BENCHMARKS` | US → `SPY`, Canada → `^GSPTSE` | Market benchmark per listing country (verify the TSX symbol in yfinance) |
 | `MARKET_DRIVEN_RATIO` | 0.5 | An episode is "market-driven" if the benchmark fell by ≥ 50% of the stock's drop over the same window |
 | `PEER_COUNT` | 5 | Peers = same yfinance industry, nearest 5 by market cap, chosen from the combined universe lists (the app has no other source of companies); the output lists the peers used and says they come from the universe |
+| `ROLLING_HIGH_DAYS` | 252 | Trading days in the rolling 52-week high (computed within one corporate-action segment only) |
+| `LISTING_COUNTRY_SUFFIXES` / `LISTING_COUNTRY_DEFAULT` | `.TO`, `.V`, `.NE`, `.CN` → CA / US | Listing country from the ticker suffix; picks the `BENCHMARKS` index |
+| `RECOVERY_CLOCK_START` | `trough` | Recovery time runs from the episode's trough (alternatives: `threshold`, `peak`) to the first close back within `RECOVERY_BAND` of the prior high |
+| `TURNAROUND_STRUCTURAL_ACTION` | `withhold` | Devil's Advocate says "structural": withhold the range (`downgrade` → show it at Low confidence, "may not be mean-reverting") |
+| `TURNAROUND_CONFIDENCE_LEVELS` / `TURNAROUND_HIGH_MIN_EPISODES` / `TURNAROUND_CONFIDENCE_RULE` | Low, Medium, High / 6 / text | ≥ 6 recovered episodes → High, ≥ `MIN_EPISODES` → Medium, else Low; −1 level for the all-types fallback, −1 for peer-based; structural flag per `TURNAROUND_STRUCTURAL_ACTION`. The rule text is printed with every estimate |
+| `TURNAROUND_SURVIVORSHIP_CAVEAT` | the caveat in "Turnaround estimate integrity" | Always shown |
+| `RATIO_COMPARE_TOLERANCE` | 1e-9 | Float slack so a value exactly at a ratio threshold (e.g. `MARKET_DRIVEN_RATIO`) counts as meeting it |
+| `DAYS_PER_MONTH` | 30.4375 | Unit constant for recovery months |
+| `MACD_FAST` / `MACD_SLOW` / `MACD_SIGNAL` / `MACD_CROSSOVER_LOOKBACK_DAYS` | 12 / 26 / 9 / 5 | Bullish MACD crossover within the last 5 trading days (turnaround near-term signal) |
+| `WILLIAMS_R_PERIOD` / `WILLIAMS_R_OVERSOLD` / `WILLIAMS_R_LOOKBACK_DAYS` | 14 / −80 / 5 | Williams %R (close-based: only closes are available) rising out of oversold: ≤ −80 within the last 5 days, above it now |
+| `DOUBLE_BOTTOM_WINDOW_DAYS` / `_PIVOT_DAYS` / `_TOLERANCE` / `_MIN_SEPARATION_DAYS` / `_MIN_BOUNCE` | 120 / 5 / 3% / 20 / 10% | Forming double bottom: two pivot lows within 3% of each other, ≥ 20 trading days apart, a neckline ≥ 10% above them, price now between the second low and the neckline |
+| `VALUATION_RECOVERY_YEARS` | 5 | Valuation-based recovery: time for a ratio to return to its own 5-year median (needs FMP) |
 | `LEADERSHIP_LOOKBACK_MONTHS` | 24 | Window for CEO/CFO departure flag |
 | `LEADERSHIP_KEYWORDS` | `role`, `departure` and `near_role` groups (see Data sources) | 6-K keyword pre-filter before the LLM check, applied by proximity (`LEADERSHIP_KEYWORD_WINDOW_WORDS`) |
 | `LEADERSHIP_HIGH_COUNT` | 2 | Departures in the window that make the flag "high" (1 = "flagged") |

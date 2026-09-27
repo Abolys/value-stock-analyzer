@@ -46,3 +46,6 @@ def test_analysis_section_renders_lenses_and_aggregate(tmp_path, monkeypatch):
     assert "(2 of 4 lenses)" in heads  # Quant and Macro scored; the LLM lenses excluded, not zero
     captions = " ".join(c.value for c in at.caption)
     assert "Mapping: DCF upside" in captions and "API cost $0.0000" in captions
+    assert "Turnaround outlook:" in heads and "Asset floor" in heads
+    assert "delisted aren't included" in captions  # the survivorship caveat
+    assert any("peak" in df.value.columns for df in at.dataframe)  # the episode list

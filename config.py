@@ -275,6 +275,43 @@ BENCHMARKS = {"US": "SPY", "CA": "^GSPTSE"}
 MARKET_DRIVEN_RATIO = 0.5
 PEER_COUNT = 5
 ROLLING_HIGH_DAYS = 252  # trading days in a 52-week window
+# Listing country (→ BENCHMARKS key) from the yfinance ticker suffix; no suffix → default.
+LISTING_COUNTRY_SUFFIXES = {".TO": "CA", ".V": "CA", ".NE": "CA", ".CN": "CA"}
+LISTING_COUNTRY_DEFAULT = "US"
+# Recovery time runs from this point of each episode to the recovery date:
+# "trough" | "threshold" (first close DRAWDOWN_THRESHOLD below the high) | "peak".
+RECOVERY_CLOCK_START = "trough"
+# Devil's Advocate impairment_type == "structural": "withhold" the range, or
+# "downgrade" it to Low confidence labelled "may not be mean-reverting".
+TURNAROUND_STRUCTURAL_ACTION = "withhold"
+TURNAROUND_CONFIDENCE_LEVELS = ["Low", "Medium", "High"]  # ordered low → high
+TURNAROUND_HIGH_MIN_EPISODES = 6
+TURNAROUND_CONFIDENCE_RULE = (
+    "Recovered episodes behind the range: ≥ TURNAROUND_HIGH_MIN_EPISODES (6) → High, ≥ MIN_EPISODES (3) → "
+    "Medium, fewer → Low. Minus one level when fewer than MIN_EPISODES match the current drop's type and all "
+    "types are used; minus one level when the range is peer-based. A structural impairment flag from the "
+    "Devil's Advocate withholds the range (TURNAROUND_STRUCTURAL_ACTION = \"withhold\") or forces Low "
+    "(\"downgrade\"). The asset floor never changes it.")
+TURNAROUND_SURVIVORSHIP_CAVEAT = (
+    "Based on companies still trading; ones that fell and were delisted aren't included, so real-world "
+    "recovery odds are lower than this suggests.")
+RATIO_COMPARE_TOLERANCE = 1e-9  # float slack so a value exactly at a ratio threshold counts as meeting it
+DAYS_PER_MONTH = 30.4375  # unit constant: 365.25 / 12
+# Near-term technical signals (adjusted closes; yfinance gives closes only, so Williams %R is close-based).
+MACD_FAST = 12
+MACD_SLOW = 26
+MACD_SIGNAL = 9
+MACD_CROSSOVER_LOOKBACK_DAYS = 5  # trading days: a bullish crossover this recent is "active"
+WILLIAMS_R_PERIOD = 14
+WILLIAMS_R_OVERSOLD = -80.0
+WILLIAMS_R_LOOKBACK_DAYS = 5  # was oversold within this many trading days and is now above it
+DOUBLE_BOTTOM_WINDOW_DAYS = 120  # trading days searched for the two lows
+DOUBLE_BOTTOM_PIVOT_DAYS = 5  # a pivot low is the lowest close within ± this many days
+DOUBLE_BOTTOM_TOLERANCE = 0.03  # the two lows within 3% of each other
+DOUBLE_BOTTOM_MIN_SEPARATION_DAYS = 20  # trading days between the lows
+DOUBLE_BOTTOM_MIN_BOUNCE = 0.10  # neckline at least 10% above the higher low
+# Valuation-based recovery (needs FMP): the ratio's own median over this many years.
+VALUATION_RECOVERY_YEARS = 5
 
 # --------------------------------------------------------------------------
 # Leadership turnover

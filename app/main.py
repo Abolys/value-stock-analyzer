@@ -38,6 +38,7 @@ from data.values import Datum  # noqa: E402
 from app import screen_jobs  # noqa: E402
 from analysis.models import LENS_LABELS, LENSES, AggregateResult, LensResult, QuantResult  # noqa: E402
 from analysis.pipeline import run_analysis  # noqa: E402
+from analysis.turnaround_models import STATUS_WITHHELD, TurnaroundResult  # noqa: E402
 from llm.client import LLMClient  # noqa: E402
 from storage import llm_store  # noqa: E402
 from screening.engine import ScreenContext, analyse_manual  # noqa: E402
@@ -116,6 +117,67 @@ def show_aggregate(a: AggregateResult) -> None:
     st.markdown(a.rationale)
 
 
+def _pct_drop(v: float | None) -> str:
+    return "N/A" if v is None else f"{-v:+.0%}"
+
+
+def show_turnaround(t: TurnaroundResult) -> None:
+    st.markdown(f"#### Turnaround outlook: {t.headline or t.status}")
+    if t.confidence:
+        st.markdown(f"**Confidence: {t.confidence}** — " + "; ".join(t.confidence_reasons))
+    elif t.status == STATUS_WITHHELD:
+        st.warning(t.structural_note)
+    st.caption(t.survivorship_caveat)
+    if t.basis_note:
+        st.caption(f"Basis: {t.basis or 'none'} — {t.basis_note}")
+    c = t.current
+    if c is not None:
+        line = f"Current drop: {c.label} (52-week high {c.high_price:,.2f} on {c.high_date}; adjusted closes)"
+        if c.qualifying:
+            line += f" · type **{c.episode_type}** ({t.benchmark} {_pct_drop(c.benchmark_drop)} over the same window)"
+        st.markdown(line)
+        if c.note:
+            st.caption(c.note)
+    st.caption(f"Structural check: {t.structural_note}")
+    st.markdown(f"Valuation-based recovery: {t.valuation_recovery}")
+    st.markdown(t.asset_floor_line + " _(context only; never changes the range or confidence)_")
+    active = t.active_signals
+    st.markdown("**Near-term signals:** " + ("; ".join(f"{s.name} — {s.detail}" for s in active)
+                                              if active else "none active"))
+    with st.expander("All signals checked"):
+        st.dataframe(pd.DataFrame([{"signal": s.name, "active": s.active, "detail": s.detail} for s in t.signals]),
+                     hide_index=True, width="stretch")
+    st.markdown("**Catalysts:**\n" + "\n".join(
+        f"- {x.text}" + (f" _({x.source})_" if x.source else "") for x in t.catalysts))
+    if t.debt_maturity_note:
+        st.caption(t.debt_maturity_note)
+    if t.peer is not None:
+        st.markdown("**Peers:** " + (", ".join(p.ticker for p in t.peer.peers) or "none") + f" — "
+                    f"{t.peer.source_note or t.peer.status}")
+        for ph in t.peer_histories:
+            if ph.error:
+                st.caption(f"{ph.ticker}: {ph.error}")
+    if t.episodes:
+        st.markdown(f"Episodes: {len(t.episodes)} ({t.recovered_count} recovered, {t.unrecovered_count} unrecovered)")
+        st.dataframe(pd.DataFrame([{
+            "peak": e.peak_date, "trough": e.trough_date, "recovered": e.recovery_date or "—",
+            "drop": f"{-e.drop:.0%}", f"months ({config.RECOVERY_CLOCK_START} → recovery)":
+                round(e.recovery_months, 1) if e.recovery_months is not None else None,
+            "type": e.episode_type, "benchmark": f"{e.benchmark} {_pct_drop(e.benchmark_drop)}",
+            "status": "recovered" if e.recovered else f"unrecovered: {e.unrecovered_reason}",
+        } for e in t.episodes]), hide_index=True, width="stretch")
+    if t.segments:
+        st.caption("Price segments (no high, drawdown or recovery crosses a corporate-action break): "
+                   + "; ".join(f"{s.start} → {s.end}" for s in t.segments)
+                   + ("" if not t.breaks else " · breaks: " + ", ".join(f"{b.date} ({b.type})" for b in t.breaks)))
+    for n in t.notes:
+        st.caption(f"Note: {n}")
+    with st.expander("Turnaround rationale and assumptions"):
+        st.markdown(t.rationale)
+        st.caption(f"Confidence rule: {t.confidence_rule}")
+        st.json(t.assumptions, expanded=False)
+
+
 def analysis_section(provider, ticker: str) -> None:
     st.subheader("Four-lens analysis")
     llm = LLMClient(db_path=config.RUNS_DB_PATH)
@@ -131,13 +193,13 @@ def analysis_section(provider, ticker: str) -> None:
     if not st.button("Run analysis", key=f"run-analysis-{ticker}",
                      help="Moat and Devil's Advocate call the LLM (API or Claude Code; cached by input)."):
         return
-    slots = {name: st.empty() for name in (*LENSES, "aggregate")}
+    slots = {name: st.empty() for name in (*LENSES, "aggregate", "turnaround")}
     for name in LENSES:
         slots[name].info(f"{LENS_LABELS[name]}: running…")
 
     def on_result(name: str, result) -> None:
         with slots[name].container():
-            (show_aggregate if name == "aggregate" else show_lens)(result)
+            {"aggregate": show_aggregate, "turnaround": show_turnaround}.get(name, show_lens)(result)
 
     ctx = ScreenContext(provider=provider, db_path=config.RUNS_DB_PATH, today=date.today(),
                         valet_fetch=services.valet_fetch())

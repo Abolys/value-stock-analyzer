@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 import config
+from analysis.turnaround_models import TurnaroundResult
 from data.values import Datum
 from signals.cyclicality import Cyclicality
 from signals.dcf import DcfBase, DcfResult, GrowthInput, PeakEarnings, ReverseDcf, SensitivityGrid
@@ -167,6 +168,7 @@ class AnalysisRun(BaseModel):
     moat: MoatResult | None = None
     devils_advocate: DevilsAdvocateResult | None = None
     aggregate: AggregateResult | None = None
+    turnaround: TurnaroundResult | None = None
     total_cost: float = 0.0
     fundamentals_as_of: date | None = None
     stale: bool = False

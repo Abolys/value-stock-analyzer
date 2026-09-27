@@ -4,6 +4,8 @@ tests/fixtures, and check each hits the branch it is listed for
 screened as a manual ticker (full stage 2) and through the two-stage screen.
 Phase 3 adds the four-lens analysis, with the LLM mocked (no API calls, no
 cost): every golden ticker runs the whole pipeline without an exception.
+Phase 4 adds the turnaround estimate: every ticker gets one with the
+survivorship caveat, and HTZ's never reaches across the 2021 break.
 Later phases extend CHECKS.
 
     python scripts/golden_check.py
@@ -84,8 +86,14 @@ def _analysed(r) -> str:
         assert a.lens(name) is not None, f"{name} missing"
     assert a.aggregate is not None and a.aggregate.lenses_used >= 3, f"aggregate {a.aggregate}"
     assert "leadership" in a.devils_advocate.payload and "asset_floor" in a.devils_advocate.payload
+    t = a.turnaround
+    assert t is not None and t.current is not None, f"turnaround missing: {t}"
+    assert t.survivorship_caveat == config.TURNAROUND_SURVIVORSHIP_CAVEAT and t.survivorship_caveat in t.rationale
+    assert t.asset_floor_line.startswith("Asset floor"), t.asset_floor_line
+    assert t.recovered_count + t.unrecovered_count == len(t.episodes)
     return (f"lenses Q {a.quant.display} ({a.quant.method}) / M {a.macro.display} / moat {a.moat.display} / "
-            f"DA {a.devils_advocate.display} → {a.aggregate.display}")
+            f"DA {a.devils_advocate.display} → {a.aggregate.display}; turnaround: {t.headline} "
+            f"({len(t.episodes)} episodes, {t.unrecovered_count} unrecovered)")
 
 
 def _screened(r) -> None:
@@ -113,6 +121,13 @@ def _htz(r):
     _screened(r)
     span = r["screen_manual"].share_trend_span
     assert span and span >= "2021-07-01", f"screen share trend crosses the break: {span}"
+    tr = r["analysis"].turnaround
+    assert all(s.start.isoformat() >= "2021-07-01" or s.end.isoformat() < "2021-07-01" for s in tr.segments), \
+        f"a turnaround segment spans the break: {tr.segments}"
+    assert all((e.peak_date.isoformat() >= "2021-07-01") == ((e.recovery_date or e.trough_date).isoformat()
+                                                             >= "2021-07-01") for e in tr.episodes), \
+        "a drawdown episode crosses the HTZ break"
+    assert any(b.date.isoformat() == "2021-07-01" for b in tr.breaks), "turnaround did not load the HTZ break"
     lead = r["analysis"].devils_advocate.payload["leadership"]
     assert LAYER_8K in lead["coverage"], f"DA payload leadership coverage {lead}"
     return (f"break 2021-07-01; share trend {t.span_label}; leadership: {r['leadership'].summary}; "

@@ -2,7 +2,7 @@
 
 Quant, Macro and Moat are independent and run concurrently; the Devil's
 Advocate starts only once all three have finished (it reads their structured
-fields). `on_result(name, result)` is called in the caller's thread as each
+fields). The turnaround estimate runs last and reads all four. `on_result(name, result)` is called in the caller's thread as each
 result arrives, so a UI can show each lens as soon as it is ready. The run and
 its LLM costs are stored in analysis_runs / llm_calls.
 """
@@ -22,6 +22,8 @@ from analysis.models import (
 )
 from analysis.moat import moat_lens
 from analysis.quant import quant_lens
+from analysis.turnaround import turnaround
+from analysis.turnaround_models import TurnaroundResult
 from data.edgar import EdgarClient
 from llm.client import LLMClient
 from llm.departure import confirm_with
@@ -80,6 +82,17 @@ def run_lenses(x: AnalysisInputs, llm: LLMClient, on_result: OnResult | None = N
     return run
 
 
+def run_turnaround(ctx: ScreenContext, x: AnalysisInputs, run: AnalysisRun) -> TurnaroundResult:
+    """The turnaround estimate after the lenses; an exception is recorded, never fatal."""
+    try:
+        return turnaround(x, run, ctx.provider, ctx.db_path)
+    except Exception as exc:
+        log.exception("turnaround failed for %s", x.ticker)
+        run.errors.append(f"turnaround: {type(exc).__name__}: {exc}")
+        status = insufficient(f"turnaround error ({type(exc).__name__}: {exc})")
+        return TurnaroundResult(ticker=x.ticker, status=status, headline=status)
+
+
 def run_analysis(ctx: ScreenContext, ticker: str, llm: LLMClient | None = None, edgar: EdgarClient | None = None,
                  on_result: OnResult | None = None, store: bool = True,
                  lenses: dict[str, Callable] | None = None) -> AnalysisRun:
@@ -94,6 +107,9 @@ def run_analysis(ctx: ScreenContext, ticker: str, llm: LLMClient | None = None, 
             llm_store.finish_analysis(llm.analysis_id, None, "failed to load", run.model_dump_json(), ctx.db_path)
         return run
     run = run_lenses(x, llm, on_result, lenses)
+    run.turnaround = run_turnaround(ctx, x, run)
+    if on_result:
+        on_result("turnaround", run.turnaround)
     if store:
         run.total_cost = llm_store.finish_analysis(llm.analysis_id, run.aggregate.score, run.aggregate.verdict,
                                                    run.model_dump_json(), ctx.db_path)
