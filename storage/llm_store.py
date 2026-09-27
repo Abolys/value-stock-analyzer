@@ -92,16 +92,45 @@ def create_analysis(ticker: str, path: Path | str | None = None) -> int:
         return int(cur.lastrowid)
 
 
-def finish_analysis(analysis_id: int, aggregate_score: float | None, verdict: str, result_json: str,
-                    path: Path | str | None = None) -> float:
-    """Store the result and return the analysis's total LLM cost (summed from its logged calls)."""
+def finish_analysis(analysis_id: int, run, path: Path | str | None = None) -> float:
+    """Store the finished AnalysisRun (scores, turnaround estimate, drawdown episode, tokens and
+    the full JSON) and return its total LLM cost (summed from its logged calls)."""
+    agg = run.aggregate
+    scores = {n: (lens.score if lens is not None and lens.ok else None)
+              for n, lens in ((n, run.lens(n)) for n in ("quant", "macro", "moat", "devils_advocate"))}
+    t = run.turnaround
+    cur = t.current if t is not None else None
+    episode_key = episode_type = episode_high = None
+    if cur is not None and cur.qualifying:
+        seg_start = t.segments[-1].start.isoformat() if t.segments else ""
+        episode_key = f"{run.ticker}:{seg_start}:{cur.high_date.isoformat()}"
+        episode_type, episode_high = cur.episode_type, cur.high_date.isoformat()
+    iqr = t.iqr_months if t is not None else None
     with connect(_db(path)) as conn:
-        total = conn.execute("SELECT COALESCE(SUM(cost), 0) FROM llm_calls WHERE analysis_id = ?",
-                             (analysis_id,)).fetchone()[0]
-        conn.execute("UPDATE analysis_runs SET finished_at = ?, aggregate_score = ?, verdict = ?, total_cost = ?, "
-                     "result_json = ? WHERE analysis_id = ?",
-                     (_now(), aggregate_score, verdict, total, result_json, analysis_id))
+        total, tin, tout = conn.execute(
+            "SELECT COALESCE(SUM(cost), 0), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) "
+            "FROM llm_calls WHERE analysis_id = ?", (analysis_id,)).fetchone()
+        conn.execute(
+            "UPDATE analysis_runs SET finished_at = ?, aggregate_score = ?, verdict = ?, total_cost = ?, "
+            "result_json = ?, input_hash = ?, quant_score = ?, macro_score = ?, moat_score = ?, da_score = ?, "
+            "lenses_used = ?, turnaround_status = ?, turnaround_median = ?, turnaround_p25 = ?, turnaround_p75 = ?, "
+            "turnaround_confidence = ?, episode_key = ?, episode_type = ?, episode_high_date = ?, input_tokens = ?, "
+            "output_tokens = ? WHERE analysis_id = ?",
+            (_now(), agg.score if agg else None, agg.verdict if agg else "failed to load", total,
+             run.model_dump_json(), run.input_hash or None, scores["quant"], scores["macro"], scores["moat"],
+             scores["devils_advocate"], agg.lenses_used if agg else 0, t.status if t else None,
+             t.median_months if t else None, iqr[0] if iqr else None, iqr[1] if iqr else None,
+             t.confidence if t else None, episode_key, episode_type, episode_high, tin, tout, analysis_id))
     return float(total)
+
+
+def month_analyses(today: date | None = None, path: Path | str | None = None) -> int:
+    """Analyses with at least one logged LLM call in the calendar month (the runs behind the spend)."""
+    today = today or date.today()
+    with connect(_db(path)) as conn:
+        return int(conn.execute(
+            "SELECT COUNT(DISTINCT analysis_id) FROM llm_calls WHERE analysis_id IS NOT NULL "
+            "AND substr(created_at, 1, 7) = ?", (today.strftime("%Y-%m"),)).fetchone()[0])
 
 
 def analysis_cost(analysis_id: int, path: Path | str | None = None) -> float:

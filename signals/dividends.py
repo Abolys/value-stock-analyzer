@@ -22,6 +22,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 import config
+from data import periods
 from data.fundamentals import Fundamentals
 from data.ratios import combine, safe_ratio
 from data.values import Datum, nm
@@ -49,6 +50,9 @@ class DividendSafety(BaseModel):
     cuts: list[DividendCut] = Field(default_factory=list)
     annual_per_share: dict[int, float] = Field(default_factory=dict)
     history_span: str = ""
+    # FCF payout per fiscal year (dividends paid / raw FCF), keyed by the company's own FY label,
+    # oldest first; each an n/m or N/A Datum with its reason when it can't be computed.
+    fcf_payout_history: dict[str, Datum] = Field(default_factory=dict)
 
     @property
     def payer(self) -> bool:
@@ -123,4 +127,20 @@ def dividend_safety(dividends: pd.Series | None, f: Fundamentals, price: Datum, 
     res.uninterrupted_years = uninterrupted_years(totals, today)
     if totals:
         res.history_span = f"{min(totals)}–{max(totals)}"
+    res.fcf_payout_history = fcf_payout_history(f, sector_adjusted)
     return res
+
+
+def fcf_payout_history(f: Fundamentals, sector_adjusted: bool = False) -> dict[str, Datum]:
+    """Dividends paid ÷ raw FCF for each fiscal year in the annual statements, oldest first."""
+    out: dict[str, Datum] = {}
+    for fy in sorted(f.fiscal_year_ends()):
+        label = periods.fiscal_year_label(fy)
+        if sector_adjusted:
+            out[label] = Datum.missing(nm("FCF not meaningful for financials and REITs"), period_end=fy)
+            continue
+        paid = f.fy("dividends_paid", fy)
+        paid_abs = paid.model_copy(update={"value": abs(paid.value)}) if paid.ok else paid
+        out[label] = safe_ratio(paid_abs, f.fy("free_cash_flow", fy), name="FCF payout", nonpositive_reason="FCF ≤ 0",
+                                num_name="dividends paid", den_name="FCF")
+    return out

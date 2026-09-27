@@ -3,30 +3,37 @@
 Quant, Macro and Moat are independent and run concurrently; the Devil's
 Advocate starts only once all three have finished (it reads their structured
 fields). The turnaround estimate runs last and reads all four. `on_result(name, result)` is called in the caller's thread as each
-result arrives, so a UI can show each lens as soon as it is ready. The run and
-its LLM costs are stored in analysis_runs / llm_calls.
+result arrives, so a UI can show each lens as soon as it is ready. The first
+event is "inputs": an AnalysisRun with the view fields filled (header, 52-week
+range, signals, fundamentals series) and no lenses yet, so the page can draw its
+header and charts before the lenses finish. The run and its LLM costs are
+stored in analysis_runs / llm_calls.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
 from analysis.aggregate import aggregate
 from analysis.devils_advocate import devils_advocate_lens
-from analysis.inputs import AnalysisInputs, AnalysisLoadError, load_inputs
+from analysis.inputs import AnalysisInputs, AnalysisLoadError, fundamental_series, load_inputs
 from analysis.macro import macro_lens
 from analysis.models import (
     AnalysisRun, DevilsAdvocateResult, LensResult, MacroResult, MoatResult, QuantResult, insufficient,
 )
 from analysis.moat import moat_lens
 from analysis.quant import quant_lens
-from analysis.turnaround import turnaround
+from analysis.turnaround import load_history, turnaround, week52_range
 from analysis.turnaround_models import TurnaroundResult
 from data.edgar import EdgarClient
 from llm.client import LLMClient
 from llm.departure import confirm_with
+from llm.prompts import PROMPT_VERSIONS
+from data.provider import DataProvider, ProviderError
 from screening.engine import ScreenContext
 from storage import llm_store
 
@@ -44,15 +51,48 @@ def _failed(name: str, exc: BaseException) -> LensResult:
     return r
 
 
+def input_hash(x: AnalysisInputs) -> str:
+    """sha256 over the deterministic inputs every lens reads, plus the LLM prompt versions."""
+    blob = {"screen": x.screen.model_dump(mode="json"), "dividends": x.dividends.model_dump(mode="json"),
+            "insiders": x.insiders.model_dump(mode="json"),
+            "leadership": x.leadership.model_dump(mode="json") if x.leadership else None,
+            "context": x.context.model_dump(mode="json"), "cyclicality": x.cyclicality.model_dump(mode="json"),
+            "prompts": PROMPT_VERSIONS}
+    return hashlib.sha256(json.dumps(blob, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def view_run(x: AnalysisInputs, provider: DataProvider | None = None, analysis_id: int | None = None) -> AnalysisRun:
+    """An AnalysisRun with the view fields filled and no lenses yet (the "inputs" event)."""
+    rev = x.f.ttm("total_revenue")
+    run = AnalysisRun(
+        ticker=x.ticker, analysis_id=analysis_id, today=x.today, fundamentals_as_of=x.screen.fundamentals_as_of,
+        stale=x.screen.stale, stale_label=x.screen.stale_label, company=x.company, sector=x.info.get("sector"),
+        industry=x.info.get("industry"), treatment=x.route.label, sector_adjusted=x.route.sector_adjusted,
+        currency=x.info.get("currency"), price_as_of=x.price.period_end,
+        fundamentals_label=rev.period_label if rev.ok else rev.status,
+        providers=sorted({p for p in (x.info.provider, x.f.provider, x.price.provider) if p}),
+        input_hash=input_hash(x), screen=x.screen, dividends=x.dividends, insiders=x.insiders,
+        leadership=x.leadership, context=x.context, series=fundamental_series(x.f, x.info.get("currency")),
+        notes=list(x.notes))
+    if provider is not None:
+        try:
+            h = load_history(provider, x.ticker)
+            run.week52 = week52_range(h.closes, h.breaks)
+        except ProviderError as exc:
+            run.notes.append(f"52-week range unavailable: {exc}")
+    return run
+
+
 def run_lenses(x: AnalysisInputs, llm: LLMClient, on_result: OnResult | None = None,
-               lenses: dict[str, Callable] | None = None) -> AnalysisRun:
-    """Quant, Macro and Moat concurrently; then the Devil's Advocate; then the aggregate."""
+               lenses: dict[str, Callable] | None = None, base: AnalysisRun | None = None) -> AnalysisRun:
+    """Quant, Macro and Moat concurrently; then the Devil's Advocate; then the aggregate.
+    `base` (from view_run) is filled in place; without it a bare run is started."""
     fns = {"quant": quant_lens, "macro": macro_lens, "moat": lambda i: moat_lens(i, llm),
            "devils_advocate": lambda i, q, m, mo: devils_advocate_lens(i, q, m, mo, llm)}
     fns.update(lenses or {})
-    run = AnalysisRun(ticker=x.ticker, analysis_id=llm.analysis_id, today=x.today,
-                      fundamentals_as_of=x.screen.fundamentals_as_of, stale=x.screen.stale,
-                      stale_label=x.screen.stale_label)
+    run = base or AnalysisRun(ticker=x.ticker, analysis_id=llm.analysis_id, today=x.today,
+                              fundamentals_as_of=x.screen.fundamentals_as_of, stale=x.screen.stale,
+                              stale_label=x.screen.stale_label)
     results: dict[str, LensResult] = {}
     with ThreadPoolExecutor(max_workers=3, thread_name_prefix="lens") as pool:
         futures = {pool.submit(fns[name], x): name for name in ("quant", "macro", "moat")}
@@ -104,13 +144,15 @@ def run_analysis(ctx: ScreenContext, ticker: str, llm: LLMClient | None = None, 
     except AnalysisLoadError as exc:
         run = AnalysisRun(ticker=ticker, analysis_id=llm.analysis_id, today=ctx.today, load_error=str(exc))
         if store:
-            llm_store.finish_analysis(llm.analysis_id, None, "failed to load", run.model_dump_json(), ctx.db_path)
+            llm_store.finish_analysis(llm.analysis_id, run, ctx.db_path)
         return run
-    run = run_lenses(x, llm, on_result, lenses)
+    base = view_run(x, ctx.provider, llm.analysis_id)
+    if on_result:
+        on_result("inputs", base)
+    run = run_lenses(x, llm, on_result, lenses, base=base)
     run.turnaround = run_turnaround(ctx, x, run)
     if on_result:
         on_result("turnaround", run.turnaround)
     if store:
-        run.total_cost = llm_store.finish_analysis(llm.analysis_id, run.aggregate.score, run.aggregate.verdict,
-                                                   run.model_dump_json(), ctx.db_path)
+        run.total_cost = llm_store.finish_analysis(llm.analysis_id, run, ctx.db_path)
     return run

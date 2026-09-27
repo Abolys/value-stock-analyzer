@@ -103,9 +103,9 @@ def test_app_shows_banner_and_serves_cached_data(tmp_path, monkeypatch):
     at.run()
     assert not at.exception
     assert any(BANNER in e.value for e in at.error)
-    at.sidebar.text_input(key="ticker").set_value("MSFT").run()
+    at.sidebar.text_input(key="ticker_box").set_value("MSFT").run()
     assert not at.exception
-    text = " ".join(str(m.value) for m in at.markdown) + " ".join(str(c.value) for c in at.caption)
-    assert "MSFT" in " ".join(h.value for h in at.header)
+    text = " ".join(str(m.value) for m in at.markdown) + " ".join(str(w.value) for w in at.warning)
+    assert "MSFT" in text
     assert "served from cache, 200d old" in text
     assert any(ev.outcome == "stale" for ev in down.cache.events)

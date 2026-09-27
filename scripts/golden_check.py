@@ -6,6 +6,10 @@ Phase 3 adds the four-lens analysis, with the LLM mocked (no API calls, no
 cost): every golden ticker runs the whole pipeline without an exception.
 Phase 4 adds the turnaround estimate: every ticker gets one with the
 survivorship caveat, and HTZ's never reaches across the 2021 break.
+Phase 5 adds the dashboard: every ticker's Stock-page charts and a .docx export
+(real PNGs through kaleido) build without an exception, with the footer on every
+page, and each ticker's branch shows in the view (JPM's sector-adjusted tag,
+LCID's runway instead of a DCF heatmap, HTZ's break marked on the drawdown chart).
 Later phases extend CHECKS.
 
     python scripts/golden_check.py
@@ -75,7 +79,35 @@ def _analysis(provider: DataProvider, ticker: str, db_path: Path, today) -> dict
     llm = LLMClient(api=api, cache=LLMCache(Path(db_path).parent / "golden_llm_cache.db"), db_path=db_path)
     run = run_analysis(ScreenContext(provider=provider, db_path=db_path, today=today), ticker, llm=llm,
                        edgar=fixture_edgar())
-    return {"analysis": run, "llm_requests": api.requests}
+    return {"analysis": run, "llm_requests": api.requests, **_dashboard(provider, run, db_path)}
+
+
+def _dashboard(provider: DataProvider, run, db_path: Path) -> dict:
+    """Phase 5: the Stock-page charts and the .docx export (charts rendered to PNG)."""
+    import io
+
+    from docx import Document
+
+    from app import stock_view as sv
+    from reports.build import DISCLAIMER, build_report
+    from reports.docx_export import to_docx
+
+    if run.load_error:
+        return {}
+    chart_map = sv.build_charts(run, sv.load_bundle(provider, run, db_path))
+    report = build_report(run, chart_map)
+    doc = Document(io.BytesIO(to_docx(report)))
+    assert all(DISCLAIMER in " ".join(p.text for p in s.footer.paragraphs) for s in doc.sections), "footer missing"
+    unrendered = [f.title for sec in report.sections for f in sec.figures if f.png is None]
+    return {"charts": chart_map, "report": report, "docx": doc, "tags": [t.text for t in sv.header_tags(run)],
+            "unrendered": unrendered}
+
+
+def _dash_line(r) -> str:
+    assert r["charts"]["small_multiples"] is not None and r["charts"]["dot_strip"] is not None
+    assert not r["unrendered"], f"charts not rendered: {r['unrendered']}"
+    pics = len(r["docx"].inline_shapes)
+    return f"dashboard: {sum(c is not None for c in r['charts'].values())} charts, .docx with {pics} PNGs"
 
 
 def _analysed(r) -> str:
@@ -93,7 +125,7 @@ def _analysed(r) -> str:
     assert t.recovered_count + t.unrecovered_count == len(t.episodes)
     return (f"lenses Q {a.quant.display} ({a.quant.method}) / M {a.macro.display} / moat {a.moat.display} / "
             f"DA {a.devils_advocate.display} → {a.aggregate.display}; turnaround: {t.headline} "
-            f"({len(t.episodes)} episodes, {t.unrecovered_count} unrecovered)")
+            f"({len(t.episodes)} episodes, {t.unrecovered_count} unrecovered); {_dash_line(r)}")
 
 
 def _screened(r) -> None:
@@ -109,6 +141,8 @@ def _meli(r):
         "MELI entered manually should still get the full stage-2 analysis"
     a = r["analysis"]
     assert a.aggregate.lenses_used == 4, "MELI entered manually should get the full four-lens analysis"
+    summary = next(s for s in r["report"].sections if s.title == "Summary")
+    assert any(FAIL_DISPLAY in p for p in summary.paragraphs), "MELI's screen status missing from the export"
     return (f"{FAIL_DISPLAY} ({r['screen'].status_reasons[0]}); full stage-2 analysis runs when entered manually; "
             f"{_analysed(r)}")
 
@@ -130,6 +164,10 @@ def _htz(r):
     assert any(b.date.isoformat() == "2021-07-01" for b in tr.breaks), "turnaround did not load the HTZ break"
     lead = r["analysis"].devils_advocate.payload["leadership"]
     assert LAYER_8K in lead["coverage"], f"DA payload leadership coverage {lead}"
+    dd = r["charts"]["drawdown"]
+    assert any(s.type == "line" and str(s.x0).startswith("2021-07-01") for s in dd.fig.layout.shapes), \
+        "HTZ break not marked on the drawdown chart"
+    assert any(t.startswith("Leadership:") and LAYER_8K in t for t in r["tags"]), f"HTZ leadership tag {r['tags']}"
     return (f"break 2021-07-01; share trend {t.span_label}; leadership: {r['leadership'].summary}; "
             f"screen {r['screen_manual'].display_status}; {_analysed(r)}")
 
@@ -150,6 +188,9 @@ def _lcid(r):
     q = r["analysis"].quant
     assert q.method == "runway" and q.dcf is None, f"LCID Quant should skip the DCF, got {q.method}"
     assert q.score is None or q.score <= config.RUNWAY_SCORE_CAP
+    assert r["charts"]["heatmap"] is None, "LCID should show cash runway, not a DCF heatmap"
+    val = next(s for s in r["report"].sections if s.title == "Valuation")
+    assert any("cash runway" in p for p in val.paragraphs), val.paragraphs
     return (f"FCF negative in {sum(v < 0 for v in fcfs)}/{len(fcfs)} FYs; shares {t.trend_per_year:+.1%}/yr "
             f"(reverse split adjusted); screen uses {fcf_metric.name}: {fcf_metric.display}; dilution flagged; "
             f"Quant skips the DCF (runway {q.runway_months.display()} months); {_analysed(r)}")
@@ -181,6 +222,9 @@ def _jpm(r):
     a = r["analysis"]
     assert a.quant.method == "excess_return", f"JPM Quant method {a.quant.method}"
     assert a.macro.reduced_data and a.macro.net_debt_ebitda.is_nm and a.macro.altman_z.is_nm, "JPM Macro reduced data"
+    assert any(t.startswith("Sector-adjusted") for t in r["tags"]), f"JPM sector-adjusted tag missing: {r['tags']}"
+    trap = r["charts"]["trap"]
+    assert any("n/m" in e for e in trap.excluded), f"JPM trap scores should be listed as n/m: {trap.excluded}"
     return (f"{r['route'].label} via industry {r['route'].industry!r}; ROE spread and P/TBV screened; "
             f"trap scores and EV/EBIT n/m; P/TBV {s.asset_floor.p_tbv.display()}; Quant excess-return, "
             f"Macro reduced data; {_analysed(r)}")

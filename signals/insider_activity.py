@@ -34,6 +34,8 @@ class InsiderSummary(BaseModel):
     # summary window, such as a cluster buy during the current drawdown.
     history_since: date | None = None
     history_buys: list[InsiderTransaction] = Field(default_factory=list)
+    # Every open-market buy and sale loaded (INSIDER_FETCH_MONTHS), for the price-panel markers.
+    history_trades: list[InsiderTransaction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
     @property
@@ -85,4 +87,5 @@ def insider_summary(data: InsiderData | None, today: date) -> InsiderSummary:
         cluster_buy=window is not None, cluster_window=window, buys=buys,
         history_since=data.since or since,
         history_buys=[t for t in data.transactions if t.type == "buy" and t.date <= today],
+        history_trades=sorted((t for t in data.transactions if t.date <= today), key=lambda t: t.date),
         errors=list(data.errors))

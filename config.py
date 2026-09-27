@@ -379,6 +379,24 @@ SCREEN_PROGRESS_POLL_SECONDS = 5  # the Screener page re-reads run progress this
 SCREEN_LOG_DIR = ROOT / "storage" / "logs"
 
 # --------------------------------------------------------------------------
+# Dashboard, run history and export (Phase 5)
+# --------------------------------------------------------------------------
+APP_VERSION = "0.5.0"  # shown in every export footer
+UNIVERSE_REFRESH_STATUS_PATH = UNIVERSE_DIR / "refresh_status.json"  # written by scripts/refresh_universe.py
+SCREEN_ETA_MIN_DONE = 5  # tickers finished before the Screener shows an estimated time left
+CHANGES_LIST_MAX = 8  # tickers named per "Changes since last screen" card before "+n more"
+# Sensitivity heatmap: a fair value within ±5% of the actual latest price is shaded neutral grey;
+# further above is one hue, further below the other.
+HEATMAP_NEUTRAL_BAND = 0.05
+INSIDER_MARKER_SIZE_RANGE = (8, 22)  # smallest / largest insider marker (px), scaled by trade value
+# Estimate scoring (History tab, Estimate accuracy page). A turnaround estimate's window runs from
+# its analysis run's date to that date + the chosen edge of its range ("p75" = upper end of the
+# interquartile range, "median"). Recovered = a close back within RECOVERY_BAND of the episode's
+# prior high inside the window; missed = the window ended first; not yet = the window is still open.
+ESTIMATE_SCORING_EDGE = "p75"
+ACCURACY_MIN_SCORED = 10  # below this many scored estimates the page shows "Not enough scored estimates yet"
+
+# --------------------------------------------------------------------------
 # Periods and staleness (Rule 3b)
 # --------------------------------------------------------------------------
 STALE_FUNDAMENTALS_DAYS = 120

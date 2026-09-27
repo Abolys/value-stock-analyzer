@@ -11,9 +11,14 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 import config
-from analysis.turnaround_models import TurnaroundResult
+from analysis.turnaround_models import TurnaroundResult, Week52
+from data.leadership import LeadershipResult
 from data.values import Datum
+from screening.models import ScreenResult
+from signals.context import ContextFields
 from signals.cyclicality import Cyclicality
+from signals.dividends import DividendSafety
+from signals.insider_activity import InsiderSummary
 from signals.dcf import DcfBase, DcfResult, GrowthInput, PeakEarnings, ReverseDcf, SensitivityGrid
 from signals.mapping import MappingStep
 
@@ -159,6 +164,23 @@ class AggregateResult(BaseModel):
         return f"{self.score:.1f} ({self.lenses_used} of {self.lenses_total} lenses)"
 
 
+class SeriesPoint(BaseModel):
+    period_end: date
+    value: float
+
+
+class FundamentalSeries(BaseModel):
+    """Fundamentals over time for the small multiples: each metric at its own period ends
+    (quarterly when the provider has quarters, else fiscal years, recorded in `freqs`),
+    in the trading currency. Missing metrics carry their reason instead of points."""
+
+    points: dict[str, list[SeriesPoint]] = Field(default_factory=dict)  # metric → oldest first
+    freqs: dict[str, str] = Field(default_factory=dict)  # metric → "quarterly" | "annual"
+    missing: dict[str, str] = Field(default_factory=dict)  # metric → N/A reason
+    currency: str | None = None
+    provider: str = ""
+
+
 class AnalysisRun(BaseModel):
     ticker: str
     analysis_id: int | None = None
@@ -175,6 +197,26 @@ class AnalysisRun(BaseModel):
     stale_label: str = ""
     errors: list[str] = Field(default_factory=list)
     load_error: str = ""
+    # The per-ticker view model (Phase 5): everything the Stock page and the export draw,
+    # serialisable so a stored run can be re-rendered.
+    company: str = ""
+    sector: str | None = None
+    industry: str | None = None
+    treatment: str = ""
+    sector_adjusted: bool = False
+    currency: str | None = None
+    price_as_of: date | None = None
+    fundamentals_label: str = ""  # e.g. "TTM to 2026-06-30 (4 quarters)" or "annual, not TTM (...)"
+    providers: list[str] = Field(default_factory=list)
+    input_hash: str = ""
+    screen: ScreenResult | None = None
+    dividends: DividendSafety | None = None
+    insiders: InsiderSummary | None = None
+    leadership: LeadershipResult | None = None
+    context: ContextFields | None = None
+    series: FundamentalSeries | None = None
+    week52: Week52 | None = None
+    notes: list[str] = Field(default_factory=list)
 
     def lens(self, name: str) -> LensResult | None:
         return getattr(self, name)

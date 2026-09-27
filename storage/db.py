@@ -1,7 +1,8 @@
 """SQLite app database (runs.db). Phase 1 created officer_snapshots; Phase 2
 adds the screen_runs / screen_results / screen_divergences tables (helpers in
 storage/screen_store.py); Phase 3 adds analysis_runs and llm_calls (helpers in
-storage/llm_store.py); later phases add portfolio tables.
+storage/llm_store.py); Phase 5 adds the run-history columns on analysis_runs
+(helpers in storage/history.py); later phases add portfolio tables.
 """
 
 from __future__ import annotations
@@ -104,6 +105,23 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 MIGRATIONS = [
     ("llm_calls", "backend", "TEXT NOT NULL DEFAULT 'api'"),
     ("llm_calls", "list_price_cost", "REAL NOT NULL DEFAULT 0"),
+    # Phase 5 run history: one row per analysis with its scores, estimate and episode.
+    ("analysis_runs", "input_hash", "TEXT"),
+    ("analysis_runs", "quant_score", "REAL"),
+    ("analysis_runs", "macro_score", "REAL"),
+    ("analysis_runs", "moat_score", "REAL"),
+    ("analysis_runs", "da_score", "REAL"),
+    ("analysis_runs", "lenses_used", "INTEGER"),
+    ("analysis_runs", "turnaround_status", "TEXT"),
+    ("analysis_runs", "turnaround_median", "REAL"),
+    ("analysis_runs", "turnaround_p25", "REAL"),
+    ("analysis_runs", "turnaround_p75", "REAL"),
+    ("analysis_runs", "turnaround_confidence", "TEXT"),
+    ("analysis_runs", "episode_key", "TEXT"),  # ticker:segment start:52-week-high date of the current drop
+    ("analysis_runs", "episode_type", "TEXT"),
+    ("analysis_runs", "episode_high_date", "TEXT"),
+    ("analysis_runs", "input_tokens", "INTEGER DEFAULT 0"),
+    ("analysis_runs", "output_tokens", "INTEGER DEFAULT 0"),
 ]
 
 

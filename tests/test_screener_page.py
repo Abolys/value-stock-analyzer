@@ -29,15 +29,19 @@ def test_screener_page_shows_latest_completed_run(monkeypatch, tmp_path):
     monkeypatch.setattr(services, "health", lambda p: HealthReport(ok=True, checked_at=datetime.now()))
 
     at = AppTest.from_file("../app/main.py", default_timeout=60)
-    at.run()
-    at.sidebar.radio(key="page").set_value("Screener").run()
+    at.run()  # the Screener is the default page
     assert not at.exception
-    assert any("Latest completed run" in s.value for s in at.subheader)
+    assert any(t.value == "Screener" for t in at.title)
+    md = " ".join(m.value for m in at.markdown)
+    assert "Completed" in md and "1 Pass" in md
     assert "likely renamed upstream" in " ".join(w.value for w in at.warning)
-    table = at.dataframe[1].value  # [0] is the universe-lists table
-    row = table.iloc[0]
-    assert row["ticker"] == "TEST" and row["status"] == "Pass" and row["source"] == "COWZ"
-    assert row["quality"].endswith("(4 of 4)")
+    assert at.radio(key="screen-status").value == "Pass"  # the table defaults to Pass only
+    table = at.dataframe[0].value
+    assert list(table.columns)[:3] == ["Ticker", "Source", "Margin of safety"]
+    assert table.iloc[0]["Ticker"] == "TEST" and table.iloc[0]["Source"] == "COWZ"
+    assert any(s.value == "Changes since last screen" for s in at.subheader)
+    assert "Needs two completed screens." in " ".join(c.value for c in at.caption)
+    assert at.get("plotly_chart")  # the scatter
 
 
 def test_launch_starts_script_in_background(monkeypatch, tmp_path):

@@ -1,4 +1,5 @@
-"""The Ticker page's four-lens analysis section renders in the app (offline fixtures, no API key)."""
+"""The Stock page auto-runs the analysis and renders every section; invalid tickers and a failed
+health check show clear errors (offline fixtures, no API key)."""
 
 from datetime import datetime
 
@@ -20,7 +21,7 @@ def _fresh_resource_cache():
     st.cache_resource.clear()
 
 
-def test_analysis_section_renders_lenses_and_aggregate(tmp_path, monkeypatch):
+def test_stock_page_renders_every_section(tmp_path, monkeypatch):
     from app import services
 
     provider = CachedProvider(fixture_provider(), DiskCache(tmp_path / "cache.db"))
@@ -29,23 +30,58 @@ def test_analysis_section_renders_lenses_and_aggregate(tmp_path, monkeypatch):
     monkeypatch.setattr(services, "build_edgar", lambda p: fixture_edgar())
     monkeypatch.setattr(services, "valet_fetch", lambda: None)
 
-    at = AppTest.from_file("../app/main.py", default_timeout=120)
+    at = AppTest.from_file("../app/main.py", default_timeout=180)
     at.run()
     assert not at.exception
     assert any("API spend this month" in c.value for c in at.sidebar.caption)
-    at.sidebar.text_input(key="ticker").set_value("LULU").run()
+    at.sidebar.text_input(key="ticker_box").set_value("LULU").run()  # opens the Stock page and auto-runs
     assert not at.exception
     assert any("No ANTHROPIC_API_KEY and no Claude Code CLI found" in i.value for i in at.info)
-    at.button(key="run-analysis-LULU").click().run()
-    assert not at.exception
-    heads = " ".join(m.value for m in at.markdown)
-    for label in ("Quantitative Fundamental:", "Macro & Balance Sheet Risk:", "Business Moat:",
-                  "Devil's Advocate:", "Aggregate:"):
-        assert label in heads, label
-    assert "LLM not configured" in heads
-    assert "(2 of 4 lenses)" in heads  # Quant and Macro scored; the LLM lenses excluded, not zero
+    lens_boxes = " ".join(b.value for b in [*at.info, *at.warning])
+    for label in ("Quantitative Fundamental:", "Macro & Balance Sheet Risk:", "Business Moat:", "Devil's Advocate:"):
+        assert label in lens_boxes, label
+    assert "LLM not configured" in lens_boxes
+    md = " ".join(m.value for m in at.markdown)
+    assert "2 of 4 lenses" in md  # verdict badge: the LLM lenses excluded, not zero
+    assert "Price as of" in " ".join(c.value for c in at.caption)
+    assert "How this score was built:" in md and "Leadership:" in md
+    heads = [h.value for h in at.subheader]
+    for h in ("Lens scores", "Fundamentals over time", "Versus peers", "Asset floor · if the earnings case fails",
+              "Valuation", "Value-trap scores", "Turnaround outlook", "Dividend and context", "Export"):
+        assert h in heads, h
     captions = " ".join(c.value for c in at.caption)
-    assert "Mapping: DCF upside" in captions and "API cost $0.0000" in captions
-    assert "Turnaround outlook:" in heads and "Asset floor" in heads
     assert "delisted aren't included" in captions  # the survivorship caveat
+    assert "dividend panel hidden for non-payers" in captions
+    assert "API cost" in captions
+    assert [t.label for t in at.tabs][-3:] == ["Turnaround details", "History", "Raw data"]
+    assert len(at.get("plotly_chart")) >= 6
     assert any("peak" in df.value.columns for df in at.dataframe)  # the episode list
+
+
+def test_invalid_ticker_shows_clear_error(tmp_path, monkeypatch):
+    from app import services
+
+    provider = CachedProvider(fixture_provider(), DiskCache(tmp_path / "cache.db"))
+    monkeypatch.setattr(services, "build_provider", lambda: provider)
+    monkeypatch.setattr(services, "health", lambda p: HealthReport(ok=True, failures=[], checked_at=datetime(2026, 9, 1)))
+    monkeypatch.setattr(services, "build_edgar", lambda p: fixture_edgar())
+    monkeypatch.setattr(services, "valet_fetch", lambda: None)
+    at = AppTest.from_file("../app/main.py", default_timeout=120)
+    at.run()
+    at.sidebar.text_input(key="ticker_box").set_value("NOPE").run()
+    assert not at.exception
+    assert any("Could not load **NOPE**" in e.value for e in at.error)
+
+
+def test_banner_on_failed_health_check(tmp_path, monkeypatch):
+    from app import services
+
+    provider = CachedProvider(fixture_provider(), DiskCache(tmp_path / "cache.db"))
+    monkeypatch.setattr(services, "build_provider", lambda: provider)
+    monkeypatch.setattr(services, "health", lambda p: HealthReport(ok=False, failures=["SPY: statements empty"],
+                                                                   checked_at=datetime(2026, 9, 1)))
+    at = AppTest.from_file("../app/main.py", default_timeout=60)
+    at.run()
+    err = " ".join(e.value for e in at.error)
+    assert "Data source not responding correctly" in err and "SPY: statements empty" in err
+    assert "upgrade_yfinance.py" in err and "shown, each with its age" in err

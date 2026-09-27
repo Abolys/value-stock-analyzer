@@ -16,12 +16,14 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from data.edgar import EdgarClient
+from analysis.models import FundamentalSeries, SeriesPoint
+from data import field_map as fm
 from data.fundamentals import Fundamentals
 from data.insiders import collect_insider_data
 from data.leadership import FilingDoc, LeadershipResult, LLMConfirmation, leadership_flag
 from data.provider import AnalystEstimates, InfoResult, ProviderError
 from data.sector import SectorRoute, route
-from data.values import Datum
+from data.values import NA_INCOMPLETE, Datum, na_field_not_found
 from screening.engine import MANUAL_SOURCE, ScreenContext, screen_ticker_full
 from screening.models import STATUS_FAILED_TO_LOAD, ScreenResult
 from signals.context import ContextFields, context_fields
@@ -69,6 +71,30 @@ class AnalysisInputs(BaseModel):
     @property
     def company(self) -> str:
         return self.info.get("long_name") or self.ticker
+
+
+SERIES_FIELDS = ("total_revenue", "net_income", "total_debt")
+
+
+def fundamental_series(f: Fundamentals, currency: str | None) -> FundamentalSeries:
+    """Revenue, net income and total debt at their own period ends for the small multiples:
+    quarterly values when the provider has quarters, else fiscal years (recorded per metric).
+    Flows are single-quarter values here, never TTM sums, so each point is one period."""
+    out = FundamentalSeries(currency=currency, provider=f.provider)
+    for name in SERIES_FIELDS:
+        src = fm.spec(name).source
+        for freq in ("quarterly", "annual"):
+            stmt = f.stmt(src, freq)
+            series = stmt.series(name) if stmt is not None else {}
+            if series:
+                out.points[name] = [SeriesPoint(period_end=d, value=v) for d, v in sorted(series.items())]
+                out.freqs[name] = freq
+                break
+        else:
+            annual = f.stmt(src, "annual")
+            out.missing[name] = (na_field_not_found(name) if annual is not None and name in annual.not_found
+                                 else NA_INCOMPLETE)
+    return out
 
 
 Confirm = Callable[[FilingDoc, str], LLMConfirmation]

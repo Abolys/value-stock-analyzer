@@ -83,6 +83,13 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `ASSET_COVERAGE_BANDS` | ≥100% fully covered, 50–100% partly, 20–50% thin, <20% negligible | Asset coverage band |
 | `MONTHS_PER_YEAR` / `QUARTERS_PER_YEAR` | 12 / 4 | Unit constants for monthly runway burn and quarterly net-net burn |
 | `SCREEN_PROGRESS_POLL_SECONDS` | 5 | Screener page progress refresh |
+| `SCREEN_ETA_MIN_DONE` | 5 | Tickers finished before the Screener shows an estimated time left |
+| `CHANGES_LIST_MAX` | 8 | Tickers named per "Changes since last screen" card before "+n more" |
+| `HEATMAP_NEUTRAL_BAND` | 0.05 | Sensitivity heatmap: fair values within ±5% of the actual latest price are shaded neutral grey |
+| `INSIDER_MARKER_SIZE_RANGE` | 8–22 px | Insider markers on the price panel, scaled by trade value |
+| `ESTIMATE_SCORING_EDGE` | `p75` | A past turnaround estimate's window runs from its run date to run date + the upper end of its interquartile range (`median` is the alternative). Recovered = a close within `RECOVERY_BAND` of the episode's prior high inside the window; missed = the window ended first; not yet = still open |
+| `ACCURACY_MIN_SCORED` | 10 | Below this many scored estimates, the Estimate accuracy page shows "Not enough scored estimates yet" |
+| `APP_VERSION` | 0.5.0 | Shown in the export footer |
 | `DCF_ADD_NET_CASH` | True | DCF bridge: fair value per share = (PV stage 1 + PV terminal + cash − debt) ÷ shares |
 | `REVERSE_DCF_TOLERANCE` / `REVERSE_DCF_MAX_ITERATIONS` | 1e-6 / 200 | Reverse-DCF bisection stopping rule |
 | Quant method for financials | Banks, insurers, other financials: fair P/B = ROE ÷ `COST_OF_CAPITAL` (zero-growth excess-return shortcut) × book value per share; the ROE spread replaces the ROIC adjustment. REITs: the same DCF on a TTM FFO base | Quant lens for sector-adjusted tickers (the reverse DCF and grid are n/m for the excess-return method) |

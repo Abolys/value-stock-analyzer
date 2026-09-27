@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import re
 from datetime import date, datetime
 from pathlib import Path
@@ -46,6 +47,21 @@ class RefreshOutcome(BaseModel):
     as_of: str | None = None
     count: int = 0
     message: str = ""
+
+
+def save_refresh_status(outcomes: list[RefreshOutcome], when: datetime | None = None,
+                        path: Path | None = None) -> None:
+    """Record each list's last refresh outcome (the Screener's list picker marks stale lists from it)."""
+    path = path or config.UNIVERSE_REFRESH_STATUS_PATH
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        data = {}
+    stamp = (when or datetime.now()).isoformat(timespec="seconds")
+    for o in outcomes:
+        data[o.key] = {"status": o.status, "as_of": o.as_of, "message": o.message, "checked_at": stamp}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2))
 
 
 # --------------------------------------------------------------------------

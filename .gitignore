@@ -11,6 +11,7 @@ cache/
 .cache/
 data/cache/
 data/universe/raw/
+data/universe/refresh_status.json
 
 # Python
 __pycache__/

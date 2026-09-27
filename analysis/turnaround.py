@@ -36,6 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import config
 from analysis.models import AnalysisRun, insufficient
 from analysis.turnaround_models import (
+    Week52,
     BASIS_ALL_TYPES, BASIS_PEERS, BASIS_SAME_TYPE, COMPANY_SPECIFIC, MARKET_DRIVEN, PEER_LABEL, STATUS_NOT_IN_DRAWDOWN,
     STATUS_OK, STATUS_WITHHELD, STRUCTURAL_LABEL, UNCLASSIFIED, VALUATION_UNAVAILABLE, Catalyst, CurrentDrawdown,
     Episode, Peer, PeerHistory, PeerSelection, RecoveryStats, Segment, TechnicalSignal, TurnaroundResult,
@@ -241,6 +242,17 @@ def current_drawdown(seg: pd.Series) -> CurrentDrawdown:
                            high_price=float(vals[hi]), latest_price=float(vals[last]), qualifying=qualifying,
                            trough_date=seg.index[tr].date() if qualifying else None,
                            trough_price=float(vals[tr]) if qualifying else None)
+
+
+def week52_range(closes: pd.Series, breaks: list[Break]) -> Week52:
+    """Low, high and latest over the last ROLLING_HIGH_DAYS adjusted closes of the latest
+    segment (never across a corporate-action break). `closes` must be non-empty and positive."""
+    seg = segments(closes.dropna(), [b.date for b in breaks])[-1]
+    window = seg.iloc[-config.ROLLING_HIGH_DAYS:]
+    hi, lo = window.idxmax(), window.idxmin()
+    latest = float(window.iloc[-1])
+    return Week52(low=float(window[lo]), high=float(window[hi]), latest=latest, low_date=lo.date(),
+                  high_date=hi.date(), as_of=window.index[-1].date(), drawdown=float(1 - latest / window[hi]))
 
 
 class History(BaseModel):

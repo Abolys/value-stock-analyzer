@@ -56,10 +56,10 @@ def test_missing_sbc_uses_raw_fcf_labelled():
 def test_fcf_yield_na_without_risk_free_source():
     m = mx.fcf_yield(d(120), d(20), d(1000), Datum.missing("N/A - no risk-free source configured for EUR"))
     assert m.outcome == NA and "no risk-free source configured for EUR" in m.na_reason
-    from screening.table import _cell
-    from screening.models import ScreenResult
-    cell = _cell(ScreenResult(ticker="X", metrics=[m]), SLOT_FCF)
-    assert cell.endswith("[N/A: comparison N/A - no risk-free source configured for EUR]")
+    from app.screener_view import metric_cell
+    cell = metric_cell(m)
+    assert cell.state == "na" and cell.text.startswith("+10.0%")  # (120 − SBC 20) / 1000
+    assert cell.text.endswith("(comparison N/A - no risk-free source configured for EUR)")
 
 
 def test_cash_runway_counts_sti_and_uses_raw_burn():

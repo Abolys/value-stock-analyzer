@@ -77,6 +77,27 @@ class CurrentDrawdown(BaseModel):
         return f"−{self.drawdown:.0%} from 52-week high"
 
 
+class Week52(BaseModel):
+    """52-week range on adjusted closes, latest corporate-action segment only (header bar)."""
+
+    low: float
+    high: float
+    latest: float
+    low_date: date
+    high_date: date
+    as_of: date
+    drawdown: float  # 1 − latest / high
+
+    @property
+    def position(self) -> float:
+        """Where the latest close sits between the low (0) and the high (1)."""
+        return 0.5 if self.high == self.low else (self.latest - self.low) / (self.high - self.low)
+
+    @property
+    def label(self) -> str:
+        return f"−{self.drawdown:.0%} from high" if self.drawdown > 0 else "at the 52-week high"
+
+
 class TechnicalSignal(BaseModel):
     name: str
     active: bool = False
