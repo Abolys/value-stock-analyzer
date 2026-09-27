@@ -17,7 +17,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | Cash runway (definition) | (cash + cash equivalents + short-term investments) ÷ monthly burn, where burn = −TTM raw FCF (not SBC-adjusted, since stock comp isn't cash out) | Used wherever the plan says "cash runway". Burn ≤ 0 → runway n/m "not burning cash" |
 | `MIN_MARGIN_OF_SAFETY` | 0.20 | Graham Number at least 20% above price to pass |
 | `MIN_FCF_SPREAD_OVER_10Y` | 0.0 | SBC-adjusted FCF yield must beat the 10-year government bond yield of the stock's trading currency |
-| `RISK_FREE_SOURCES` | USD → yfinance `^TNX`; CAD → Bank of Canada Valet API, 10-year benchmark bond yield series `BD.CDN.10YR.DQ.YLD` (verified 2026-09) | 10-year yield per trading currency |
+| `RISK_FREE_SOURCES` | USD → yfinance `^TNX`; CAD → Bank of Canada Valet API, 10-year benchmark bond yield series (verify the series code, e.g. `BD.CDN.10YR.DQ.YLD`) | 10-year yield per trading currency |
 | `MIN_METRICS_FOR_PASS` | 3 | A screen Pass needs every available metric to pass and at least 3 of the 4 metrics available; fewer available → "Incomplete" |
 | `MAX_NET_DEBT_EBITDA` | 3.0 | Leverage ceiling |
 | `MAX_SHARE_GROWTH_PER_YEAR` | 0.0 | Pass if share count flat or shrinking |
@@ -32,7 +32,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `MARKET_DRIVEN_RATIO` | 0.5 | An episode is "market-driven" if the benchmark fell by ≥ 50% of the stock's drop over the same window |
 | `PEER_COUNT` | 5 | Peers = same yfinance industry, nearest 5 by market cap, chosen from the combined universe lists (the app has no other source of companies); the output lists the peers used and says they come from the universe |
 | `LEADERSHIP_LOOKBACK_MONTHS` | 24 | Window for CEO/CFO departure flag |
-| `LEADERSHIP_KEYWORDS` | see Data sources | 6-K keyword pre-filter before the LLM check |
+| `LEADERSHIP_KEYWORDS` | `role`, `departure` and `near_role` groups (see Data sources) | 6-K keyword pre-filter before the LLM check, applied by proximity (`LEADERSHIP_KEYWORD_WINDOW_WORDS`) |
 | `LEADERSHIP_HIGH_COUNT` | 2 | Departures in the window that make the flag "high" (1 = "flagged") |
 | `CORP_ACTION_PRICE_GAP` / `CORP_ACTION_SHARE_CHANGE` | 0.70 / 0.50 | Heuristic break detection (see Data sources) |
 | `CACHE_TTL_PRICES` | 1 day | Price cache expiry |
@@ -53,7 +53,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `CORP_ACTION_SHARE_WINDOW_DAYS` | 120 | How close to a price gap the share-count change must fall for the corporate-action heuristic (also the window for matching a split to a share jump) |
 | `SPLIT_MATCH_TOLERANCE` | 0.15 | A share-count jump within ±15% of a recorded split ratio is treated as that split |
 | `LEADERSHIP_ROLE_TERMS` / `DEPARTURE_TERMS` | CEO/CFO titles; resign, retire, step down, … | 8-K Item 5.02 parsing: a departure needs a role term and a departure term in the same sentence (divisional titles such as "CEO of CCB" don't count) |
-| `LEADERSHIP_KEYWORDS` | `role` and `action` groups | 6-K pre-filter: at least one role keyword and one action keyword must match before the LLM check |
+| `LEADERSHIP_KEYWORD_WINDOW_WORDS` / `LEADERSHIP_NEAR_ROLE_WORDS` | 12 / 2 | 6-K pre-filter: a departure keyword must fall within 12 words of a CEO/CFO title ("interim" within 2), so quarterly reports that merely mention the CEO, "interim" statements and "retirement" benefits don't reach the LLM |
 | `QUARTER_GAP_DAYS` | 80–100 | Consecutive quarters for the TTM sum must be this far apart; otherwise the latest fiscal year is used ("annual, not TTM") |
 | `HEALTH_CHECK_TTL_MINUTES` | 60 | A health-check result is reused this long at app start |
 | `RISK_FREE_QUOTE_RANGE` | 0–20 | Sanity range for a quoted 10-year yield in percent (`^TNX` is quoted in percent, verified 2026-09) |
@@ -71,7 +71,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 - **SEC EDGAR (free):** filings and filing dates. Requests must send the `SEC_USER_AGENT` header from `.env` (name plus contact email) and respect `EDGAR_MAX_REQUESTS_PER_SECOND`.
 - **Leadership-turnover flag — layered sources.** A CEO or CFO departure within `LEADERSHIP_LOOKBACK_MONTHS` raises the flag. Use every layer that applies to the ticker and merge the events (dedupe by person and month):
   1. **8-K Item 5.02** (US domestic filers): structured officer-change filings; full lookback history. Coverage label: `"8-K, full history"`.
-  2. **6-K filings** (cross-listed Canadian companies filing 40-F/6-K, and foreign ADRs filing 20-F/6-K): free-form press releases, so two steps. First a cheap keyword filter over the last `LEADERSHIP_LOOKBACK_MONTHS` of 6-K text and exhibit descriptions using `LEADERSHIP_KEYWORDS` (e.g. "Chief Executive", "Chief Financial", "CEO", "CFO", "resign", "retire", "step down", "succession", "appoint", "interim"). Then the LLM confirms only the keyword matches, returning structured JSON: `{departure: bool, role, person, effective_date}`. Cache by filing accession number. Coverage label: `"6-K, keyword + LLM check"`.
+  2. **6-K filings** (cross-listed Canadian companies filing 40-F/6-K, and foreign ADRs filing 20-F/6-K): free-form press releases, so two steps. First a cheap keyword filter over the last `LEADERSHIP_LOOKBACK_MONTHS` of 6-K text and exhibit descriptions using `LEADERSHIP_KEYWORDS`: a departure word ("resign", "retire" but not "retirement", "step down", "succession" but not "succession planning", "succeed", "departure") within `LEADERSHIP_KEYWORD_WINDOW_WORDS` words of a role ("Chief Executive", "Chief Financial", "CEO", "CFO"), or "interim" right next to one. Document-wide co-occurrence is not enough: quarterly-report 6-Ks mention the CEO, "interim" statements and "retirement" benefits on different pages. Then the LLM confirms only the keyword matches, returning structured JSON: `{departure: bool, role, person, effective_date}`. Cache by filing accession number. Coverage label: `"6-K, keyword + LLM check"`.
   3. **Officer snapshots** (every ticker, and the only automated source for TSX-only companies): save yfinance `companyOfficers` to the `officer_snapshots` table. The stage-1 `info` call already returns it, so every screen run snapshots every screened ticker at no extra cost; manual analyses snapshot too. `scripts/snapshot_officers.py` only covers tickers not in any screened list (e.g. watchlist names you haven't screened). A change in the CEO or CFO name between two snapshots is an event dated to the later snapshot. It only sees changes after the first snapshot. Coverage label: `"officer tracking since <first snapshot date>"`.
   4. **Manual events:** `/data/leadership_events.csv` (ticker, date, role, person, note, source) for departures the user reads about. Coverage label: `"manual"`.
   - **Never automate SEDAR+.** Its terms of use prohibit scraping and automated monitoring, and the site blocks bots. SEDAR+ is for the user to read by hand, feeding the manual file.
@@ -88,15 +88,16 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 - **Screener universe:** one CSV per list in `/data/universe/`, each with columns `ticker, name, source, as_of`. The screener UI lets the user choose which lists to screen.
   - Pre-filtered value lists, built from ETF holdings files:
     - `cowz.csv` — Pacer US Cash Cows 100 (COWZ): top 100 Russell 1000 companies by FCF yield.
-    - `cash_cows_small.csv` — Pacer's small-cap Cash Cows ETF (believed to be CALF; confirm the ticker on paceretfs.com before building).
+    - `cash_cows_small.csv` — Pacer US Small Cap Cash Cows ETF (CALF, confirmed 2026-09).
+    - paceretfs.com blocks automated downloads (Cloudflare), so both Pacer lists come from the funds' **SEC N-PORT-P filings** via the EDGAR client (fund ticker → series via `company_tickers_mf.json`; each holding carries its ticker; only long common equity is kept). N-PORT holdings are public about 60 days after the period end, so these lists can lag a quarterly rebalance by up to ~5 months; `as_of` records the N-PORT period. A Pacer file saved by hand into `/data/universe/raw/` wins when it is newer.
   - Wider nets, from iShares holdings files:
-    - `sp400.csv` (IJH) and `sp600.csv` (IJR) — US mid- and small-cap.
+    - `sp400.csv` and `sp600.csv` — US mid- and small-cap, from the SSGA SPDR SPMD and SPSM daily holdings files (same S&P indexes), with iShares IJH/IJR as fallbacks (the iShares US CSV links return an HTML gate as of 2026-09).
     - `tsx_composite.csv` (XIC) — about 220 Canadian stocks; yfinance tickers need the `.TO` suffix.
   - Hand-maintained lists:
     - `watchlist.csv` — the user's own tickers.
     - `dataroma.csv` — names copied by hand each quarter from Dataroma's superinvestor holdings. Dataroma has no official API; never scrape it. Holdings come from 13F filings, so they can be up to ~45 days stale and cover US long positions only; the `as_of` column records the quarter.
   - `scripts/refresh_universe.py` downloads the ETF holdings files, normalises tickers to yfinance format, drops cash, futures and other non-equity lines, and writes the CSVs.
-    - The holdings-file URLs live in `config.py` (`UNIVERSE_SOURCES`), not in code, because issuers change them.
+    - The sources live in `config.py` (`UNIVERSE_SOURCES`), not in code, because issuers change them. Each list has an ordered list of sources, tried in turn.
     - If a download fails or its format changed, keep the previous CSV, print which list is stale and since when, and accept a manually downloaded file dropped into `/data/universe/raw/` instead.
   - When lists are combined, remove duplicate tickers but keep every source: a ticker in COWZ and Dataroma shows `source = "COWZ, Dataroma"`.
 - **Caching:** all provider calls go through a disk cache (SQLite or parquet) and are throttled. `st.cache_data` sits on top for in-session speed only.
@@ -182,12 +183,21 @@ Computed in `/signals`, deterministic, following Rules 2, 2b and 3b (N/A vs n/m,
 
 **Context fields (never scored):** insider ownership %, short interest % of float, analyst estimates and revision direction.
 
+**Asset floor (downside signal, information only).** How much of the market cap is backed by net assets if the earnings case fails. These never change a score, the quality score or the screen status; they're shown and passed on.
+- **Tangible book value (TBV)** = total shareholders' equity − goodwill − other intangible assets − preferred equity where reported. **P/TBV** = market cap ÷ TBV.
+- **Net current asset value (NCAV)** = total current assets − total liabilities (all of them, including long-term debt) − preferred equity where reported.
+- **Net-net working capital (NNWC)** = cash and short-term investments + `NNWC_RECEIVABLES_WEIGHT` (0.75) × receivables + `NNWC_INVENTORY_WEIGHT` (0.5) × inventory − total liabilities. A rough liquidation value.
+- **Asset coverage** = TBV ÷ market cap, shown as a percentage, with a band from `ASSET_COVERAGE_BANDS`: ≥ 100% "fully covered", 50–100% "partly covered", 20–50% "thin", < 20% "negligible".
+- **Net-net flag:** when NCAV ≥ market cap, highlight "trades below net current assets" (like the EV ≤ 0 flag: a signal worth a look, not a verdict). If the company is burning cash, add how long the discount lasts at the current burn: (NCAV − market cap) ÷ quarterly raw FCF burn, e.g. "discount gone in ~5 quarters at current burn".
+- Sign and sector rules (Rule 2b style): TBV ≤ 0 → P/TBV and asset coverage n/m "negative tangible book", with coverage shown as "none". NCAV and NNWC may be negative and are shown as negative numbers, never n/m, since a negative value is the answer. Financials and REITs get NCAV and NNWC n/m (their balance sheets aren't split into current and non-current); banks keep P/TBV, which is already their sector-adjusted valuation metric.
+- All inputs follow Rule 3b (latest quarter, with its date) and Rule 5 (currency conversion, actual latest price for market cap).
+
 **Where the signals go:**
-- Screener (stage 2): Piotroski, Altman zone, Beneish flag and EV/EBIT per ticker. A **trap-risk flag** fires when F ≤ `PIOTROSKI_WEAK` or the Altman zone is distress. It is shown, not a Fail, unless `TRAP_RISK_FAILS_SCREEN` (default False) is on.
+- Screener (stage 2): Piotroski, Altman zone, Beneish flag, EV/EBIT, P/TBV and asset coverage per ticker, plus the net-net flag when it fires. A **trap-risk flag** fires when F ≤ `PIOTROSKI_WEAK` or the Altman zone is distress. It is shown, not a Fail, unless `TRAP_RISK_FAILS_SCREEN` (default False) is on.
 - Quant lens: Piotroski adjustment, reverse DCF, sensitivity range, peak-earnings normalisation (see Score mapping).
 - Macro lens: Altman Z'' sub-score (see Score mapping).
-- Devil's Advocate payload: all of the above plus insider activity, dividend safety and the context fields, each with coverage or N/A reasons.
-- Turnaround: an insider cluster buy during the current drawdown is listed as a near-term signal, next to the technical signals; it never overrides the structural-impairment rule.
+- Devil's Advocate payload: all of the above plus insider activity, dividend safety, the asset floor (TBV, P/TBV, NCAV, NNWC, asset coverage and band, net-net flag) and the context fields, each with coverage or N/A reasons. The Devil's Advocate must say how much of the price the asset floor covers if the earnings case fails.
+- Turnaround: an insider cluster buy during the current drawdown is listed as a near-term signal, next to the technical signals; it never overrides the structural-impairment rule. The output also states the asset floor as context (e.g. "Asset floor: 85% of the price covered by tangible book"); it doesn't change the range or the confidence.
 
 ## Portfolio and thesis tracking (Phase 6)
 
@@ -221,7 +231,7 @@ Capture each once with `scripts/capture_fixtures.py` into `/tests/fixtures/` so 
 | LULU | Moat lens receives the sector-specific threat instruction (brand/private-label for retail), not a default AI-disruption framing |
 | JPM | Financials branch: EBITDA-based metrics replaced by sector-adjusted ones |
 
-Signal tests use hand-built two-year statement fixtures with known answers: a Piotroski case scoring exactly 9 and one with missing checks, Altman and Beneish against hand-computed values, JPM getting n/m on all three and on EV/EBIT, a reverse DCF that recovers a known growth rate, a synthetic cyclical at peak margins being flagged and normalised, a Form 4 fixture with a cluster buy (3 insiders, code P) plus grants and option exercises that must be ignored, and a dividend payer with a cut.
+Signal tests use hand-built two-year statement fixtures with known answers: a Piotroski case scoring exactly 9 and one with missing checks, Altman and Beneish against hand-computed values, JPM getting n/m on all three and on EV/EBIT, a reverse DCF that recovers a known growth rate, a synthetic cyclical at peak margins being flagged and normalised, a Form 4 fixture with a cluster buy (3 insiders, code P) plus grants and option exercises that must be ignored, a dividend payer with a cut, and asset-floor fixtures: a company with NCAV above market cap (net-net flag fires, with the burn-duration line when FCF-negative), one with heavy goodwill giving negative TBV (P/TBV n/m, coverage "none"), NNWC against hand-computed weights, and JPM with NCAV n/m but P/TBV kept.
 
 Leadership-flag tests use saved filing fixtures and synthetic snapshots rather than a golden ticker: an 8-K Item 5.02 departure, a 6-K CEO-change press release (keyword hit, LLM mocked to confirm), a 6-K with a keyword but no departure (LLM mocked to reject), two officer snapshots with a changed CFO, a manual CSV event, and a ticker whose tracking is shorter than the lookback (must report partial coverage).
 
@@ -294,6 +304,7 @@ Same evidence rule: at least 2 specific facts from the payload.
 - **Fundamentals over time are small multiples, not one overlaid chart:** separate small panels for price, revenue, net income and total debt, stacked on a shared time axis, each on its own scale. Fundamentals are plotted at their quarterly period ends, not stretched to daily points.
 - **Lens scores are a dot strip, not a radar.** One horizontal 1–10 scale per lens with a dot for its score, a vertical line at the aggregate, and the gap from the Devil's Advocate to the others' mean shaded when the controversy flag fires. A lens with insufficient data shows a hollow marker labelled with the reason, never a dot at zero. (Radar charts exaggerate differences by area and hide the gap that matters most.)
 - **Peer strip:** for a ticker's key metrics (margin of safety, FCF yield vs risk-free, net debt/EBITDA, ROIC), one row per metric with the peers as grey dots and the ticker highlighted, with each peer labelled on hover. N/A and n/m peers are listed below the strip.
+- **Asset floor panel:** horizontal bars on one shared scale for market cap, tangible book, NCAV and NNWC, with a vertical line at the market cap so it's obvious which asset measures reach it. Negative values extend left of zero. The asset coverage percentage and band sit above the bars, and the net-net flag (with the burn-duration line) below when it fires.
 - **Sensitivity heatmap:** the 5 × 5 fair-value grid with discount rate on one axis and growth on the other, each cell showing fair value. Colour is diverging around the actual latest price (cells above price in one hue, below in the other, neutral grey near price), with the base case outlined and the reverse-DCF growth marked on the growth axis.
 - **Trap-score panel:** three small meters (Piotroski 0–9, Altman Z'' with its three zones shaded, Beneish with the threshold marked), each labelled with its value, zone and "n of 9 checks" where relevant. The Beneish meter carries a one-line note that it's probabilistic.
 - **Insider markers:** on the price panel of the small multiples, open-market buys as up-triangles and sales as down-triangles (10b5-1 sales hollow), sized by value, with the insider and amount on hover.

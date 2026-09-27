@@ -15,6 +15,7 @@ through the manual CSV.
 
 from __future__ import annotations
 
+import bisect
 import csv
 import re
 from datetime import date
@@ -204,17 +205,43 @@ def layer_8k(ticker: str, docs: list[FilingDoc], start: date, today: date,
 # --------------------------------------------------------------------------
 # Layer 2: 6-K keyword pre-filter + LLM confirmation
 # --------------------------------------------------------------------------
-def _kw_found(text: str, kw: str) -> bool:
-    flags = 0 if kw.isupper() else re.IGNORECASE  # "CEO"/"CFO" must be upper case
-    return re.search(rf"(?<![A-Za-z]){re.escape(kw)}", text, flags) is not None
+def _matches(text: str, patterns: list[str]) -> list[tuple[int, str]]:
+    """(char offset, matched text) for every pattern hit; all-caps acronyms are case-sensitive."""
+    out = []
+    for pat in patterns:
+        flags = 0 if pat.isupper() else re.IGNORECASE
+        for m in re.finditer(rf"(?<![A-Za-z]){pat}(?![A-Za-z])", text, flags):
+            out.append((m.start(), m.group(0)))
+    return out
 
 
 def keyword_hits(text: str, descriptions: list[str] | None = None) -> list[str]:
-    """Keywords found; empty unless at least one role AND one action keyword occur."""
+    """Keywords that put a 6-K through to the LLM check (empty when none).
+
+    A departure word must fall within LEADERSHIP_KEYWORD_WINDOW_WORDS words of
+    a CEO/CFO title, or a near-role word ("interim") right next to one.
+    Document-wide co-occurrence is not enough: quarterly reports mention the
+    CEO, "interim" statements and "retirement" benefits on different pages.
+    """
     blob = " ".join([text, *(descriptions or [])])
-    roles = [k for k in config.LEADERSHIP_KEYWORDS["role"] if _kw_found(blob, k)]
-    actions = [k for k in config.LEADERSHIP_KEYWORDS["action"] if _kw_found(blob, k)]
-    return roles + actions if roles and actions else []
+    starts = [m.start() for m in re.finditer(r"\S+", blob)]
+
+    def word_index(offset: int) -> int:
+        return bisect.bisect_right(starts, offset) - 1
+
+    kw = config.LEADERSHIP_KEYWORDS
+    roles = [(word_index(o), t) for o, t in _matches(blob, kw["role"])]
+    if not roles:
+        return []
+    hits: list[str] = []
+    for group, window in (("departure", config.LEADERSHIP_KEYWORD_WINDOW_WORDS),
+                          ("near_role", config.LEADERSHIP_NEAR_ROLE_WORDS)):
+        for o, t in _matches(blob, kw[group]):
+            wi = word_index(o)
+            near = [r for ri, r in roles if abs(ri - wi) <= window]
+            if near:
+                hits.extend(x for x in (near[0], t) if x not in hits)
+    return hits
 
 
 # ============================ PHASE 3 STUB ================================

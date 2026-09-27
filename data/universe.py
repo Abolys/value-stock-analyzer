@@ -73,7 +73,8 @@ def _find_col(cols: list[str], aliases: list[str]) -> str | None:
 
 def _as_of_from_preamble(lines: list[str]) -> str | None:
     for line in lines:
-        m = re.search(r"as of[^A-Za-z0-9]*\"?([A-Za-z]{3,9}\.? \d{1,2}, \d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4})",
+        m = re.search(r"as of[^A-Za-z0-9]*\"?([A-Za-z]{3,9}\.? \d{1,2}, \d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4}"
+                      r"|\d{1,2}-[A-Za-z]{3}-\d{4})",
                       line, re.IGNORECASE)
         if m:
             try:
@@ -195,38 +196,101 @@ def _default_get(url: str) -> bytes:
     return r.content
 
 
+def nport_frame(filing, label: str, exchange: str) -> tuple[pd.DataFrame, list[str]]:
+    """Universe frame from an N-PORT filing; as_of is the report period."""
+    from data.nport import parse_nport
+
+    parsed = parse_nport(filing.xml)
+    if parsed.series_id and parsed.series_id != filing.series_id:
+        raise ValueError(f"N-PORT series {parsed.series_id} does not match {filing.series_id}")
+    as_of = (parsed.report_period or filing.filing_date).isoformat()
+    rows, skipped = [], list(parsed.skipped)
+    for h in parsed.holdings:
+        t = normalise_ticker(h.ticker, exchange)
+        if t is None:
+            skipped.append(f"{h.name}: ticker {h.ticker!r} not usable")
+            continue
+        rows.append({"ticker": t, "name": h.name, "source": label, "as_of": as_of})
+    df = pd.DataFrame(rows, columns=COLUMNS).drop_duplicates("ticker").reset_index(drop=True)
+    if df.empty:
+        raise ValueError("N-PORT filing had no usable equity holdings")
+    return df, skipped
+
+
+def _fetch_source(src: dict, label: str, exchange: str, http_get: Callable[[str], bytes],
+                  edgar_factory: Callable[[], object]) -> tuple[pd.DataFrame, str]:
+    """(frame, description) for one configured source; raises on any failure."""
+    if src["format"] == "nport":
+        filing = edgar_factory().latest_nport(src["fund"])
+        df, skipped = nport_frame(filing, label, exchange)
+        note = f"from {src['name']} (holdings as of {df['as_of'].iloc[0]}, filed {filing.filing_date})"
+        if skipped:
+            note += f"; {len(skipped)} holding(s) skipped: " + "; ".join(skipped)
+        return df, note
+    df = parse_holdings(http_get(src["url"]), label, exchange, filename=src["url"].split("?")[0])
+    return df, f"from {src['name']}"
+
+
+def _default_edgar():
+    from data.edgar import EdgarClient
+
+    return EdgarClient()
+
+
+def _read_raw(raw: Path, label: str, exchange: str) -> pd.DataFrame:
+    mtime = datetime.fromtimestamp(raw.stat().st_mtime).date().isoformat()
+    df = parse_holdings(raw.read_bytes(), label, exchange, filename=raw.name)
+    if df["as_of"].iloc[0] == date.today().isoformat():
+        df["as_of"] = mtime  # no date inside the file: use when it was saved
+    return df
+
+
 def refresh_list(key: str, http_get: Callable[[str], bytes] = _default_get,
-                 directory: Path = config.UNIVERSE_DIR, raw_dir: Path = config.UNIVERSE_RAW_DIR) -> RefreshOutcome:
-    src = config.UNIVERSE_SOURCES[key]
-    label, exchange = src["label"], src["exchange"]
-    errors = []
-    try:
-        df = parse_holdings(http_get(src["url"]), label, exchange, filename=src["url"].split("?")[0])
-        df.to_csv(list_path(key, directory), index=False)
-        return RefreshOutcome(key=key, status="updated", as_of=df["as_of"].iloc[0], count=len(df),
-                              message=f"{label}: {len(df)} tickers downloaded")
-    except Exception as exc:
-        errors.append(f"download failed: {exc}")
+                 directory: Path = config.UNIVERSE_DIR, raw_dir: Path = config.UNIVERSE_RAW_DIR,
+                 edgar_factory: Callable[[], object] = _default_edgar) -> RefreshOutcome:
+    """Try each configured source in order, then the manual file; keep the old list if all fail.
+
+    A manual file in raw_dir wins over a downloaded list when its date is newer
+    (e.g. a Pacer file saved from the browser vs a two-month-old N-PORT).
+    """
+    cfg = config.UNIVERSE_SOURCES[key]
+    label, exchange = cfg["label"], cfg["exchange"]
+    errors: list[str] = []
+    downloaded: tuple[pd.DataFrame, str, str] | None = None  # (frame, note, source name)
+    for src in cfg["sources"]:
+        try:
+            df, note = _fetch_source(src, label, exchange, http_get, edgar_factory)
+            downloaded = (df, note, src["name"])
+            break
+        except Exception as exc:
+            errors.append(f"{src['name']} failed: {exc}")
+    raw_df, raw_note = None, ""
     raw = _raw_file(key, raw_dir)
     if raw is not None:
         try:
-            mtime = datetime.fromtimestamp(raw.stat().st_mtime).date().isoformat()
-            df = parse_holdings(raw.read_bytes(), label, exchange, filename=raw.name)
-            if df["as_of"].iloc[0] == date.today().isoformat():
-                df["as_of"] = mtime  # no date inside the file: use when it was saved
-            df.to_csv(list_path(key, directory), index=False)
-            return RefreshOutcome(key=key, status="raw file", as_of=df["as_of"].iloc[0], count=len(df),
-                                  message=f"{label}: {len(df)} tickers from manual file {raw.name} ({'; '.join(errors)})")
+            raw_df = _read_raw(raw, label, exchange)
         except Exception as exc:
             errors.append(f"manual file {raw.name} unreadable: {exc}")
+    tail = f" ({'; '.join(errors)})" if errors else ""
+    if raw_df is not None and (downloaded is None or raw_df["as_of"].iloc[0] > downloaded[0]["as_of"].iloc[0]):
+        raw_df.to_csv(list_path(key, directory), index=False)
+        if downloaded is not None:
+            raw_note = f"; newer than {downloaded[2]} (as of {downloaded[0]['as_of'].iloc[0]})"
+        return RefreshOutcome(key=key, status="raw file", as_of=raw_df["as_of"].iloc[0], count=len(raw_df),
+                              message=f"{label}: {len(raw_df)} tickers from manual file {raw.name}{raw_note}{tail}")
+    if downloaded is not None:
+        df, note, _name = downloaded
+        df.to_csv(list_path(key, directory), index=False)
+        return RefreshOutcome(key=key, status="updated", as_of=df["as_of"].iloc[0], count=len(df),
+                              message=f"{label}: {len(df)} tickers {note}{tail}")
     existing = load_list(key, directory)
     if not existing.empty:
         as_of = existing["as_of"].iloc[0]
         return RefreshOutcome(key=key, status="stale", as_of=as_of, count=len(existing),
-                              message=f"STALE: {label} kept previous list, stale since {as_of} ({'; '.join(errors)})")
+                              message=f"STALE: {label} kept previous list, stale since {as_of}{tail}")
     return RefreshOutcome(key=key, status="missing", count=0,
                           message=f"MISSING: {label} has no list yet; download the holdings file by hand into "
-                                  f"{raw_dir}/{key}.csv or .xlsx ({'; '.join(errors)})")
+                                  f"{raw_dir}/{key}.csv or .xlsx{tail}")
 
 
 def ensure_manual_templates(directory: Path = config.UNIVERSE_DIR) -> None:

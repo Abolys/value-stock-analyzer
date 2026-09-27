@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<edgarSubmission xmlns="http://www.sec.gov/edgar/nport" xmlns:com="http://www.sec.gov/edgar/common">
+  <headerData><submissionType>NPORT-P</submissionType>
+    <filerInfo><seriesClassInfo><seriesId>S000099999</seriesId></seriesClassInfo></filerInfo>
+  </headerData>
+  <formData>
+    <genInfo><repPdEnd>2026-07-31</repPdEnd><repPdDate>2026-04-30</repPdDate></genInfo>
+    <invstOrSecs>
+      <invstOrSec><name>Acme Corp</name><cusip>000000001</cusip>
+        <identifiers><isin value="US0000000011"/><ticker value="ACME"/></identifiers>
+        <pctVal>2.5</pctVal><payoffProfile>Long</payoffProfile><assetCat>EC</assetCat></invstOrSec>
+      <invstOrSec><name>Berkshire Hathaway Inc</name><cusip>084670702</cusip>
+        <identifiers><ticker value="BRK/B"/></identifiers>
+        <pctVal>1.0</pctVal><payoffProfile>Long</payoffProfile><assetCat>EC</assetCat></invstOrSec>
+      <invstOrSec><name>Private Holdco LLC</name><cusip>000000002</cusip>
+        <identifiers><isin value="US0000000029"/></identifiers>
+        <pctVal>0.5</pctVal><payoffProfile>Long</payoffProfile><assetCat>EC</assetCat></invstOrSec>
+      <invstOrSec><name>Treasury Money Market Portfolio</name><cusip>000000003</cusip>
+        <identifiers><ticker value="TMMXX"/></identifiers>
+        <pctVal>0.3</pctVal><payoffProfile>Long</payoffProfile><assetCat>STIV</assetCat></invstOrSec>
+      <invstOrSec><name>Shorted Co</name><cusip>000000004</cusip>
+        <identifiers><ticker value="SHRT"/></identifiers>
+        <pctVal>-0.1</pctVal><payoffProfile>Short</payoffProfile><assetCat>EC</assetCat></invstOrSec>
+    </invstOrSecs>
+  </formData>
+</edgarSubmission>

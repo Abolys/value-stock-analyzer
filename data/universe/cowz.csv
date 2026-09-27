@@ -1,0 +1,101 @@
+ticker,name,source,as_of
+T,AT&T Inc,COWZ,2026-04-30
+MO,Altria Group Inc,COWZ,2026-04-30
+ADM,Archer-Daniels-Midland Co,COWZ,2026-04-30
+ADSK,Autodesk Inc,COWZ,2026-04-30
+JBHT,JB Hunt Transport Services Inc,COWZ,2026-04-30
+KHC,Kraft Heinz Co/The,COWZ,2026-04-30
+LH,Labcorp Holdings Inc,COWZ,2026-04-30
+LDOS,Leidos Holdings Inc,COWZ,2026-04-30
+LULU,Lululemon Athletica Inc,COWZ,2026-04-30
+MPC,Marathon Petroleum Corp,COWZ,2026-04-30
+MCK,McKesson Corp,COWZ,2026-04-30
+NVR,NVR Inc,COWZ,2026-04-30
+NTAP,NetApp Inc,COWZ,2026-04-30
+NEM,Newmont Corp,COWZ,2026-04-30
+OXY,Occidental Petroleum Corp,COWZ,2026-04-30
+OMC,Omnicom Group Inc,COWZ,2026-04-30
+ON,ON Semiconductor Corp,COWZ,2026-04-30
+PTC,PTC Inc,COWZ,2026-04-30
+PCAR,PACCAR Inc,COWZ,2026-04-30
+PAYX,Paychex Inc,COWZ,2026-04-30
+PFE,Pfizer Inc,COWZ,2026-04-30
+PHM,PulteGroup Inc,COWZ,2026-04-30
+VRSN,VeriSign Inc,COWZ,2026-04-30
+VZ,Verizon Communications Inc,COWZ,2026-04-30
+VTRS,Viatris Inc,COWZ,2026-04-30
+WSM,Williams-Sonoma Inc,COWZ,2026-04-30
+INTU,Intuit Inc,COWZ,2026-04-30
+IQV,IQVIA Holdings Inc,COWZ,2026-04-30
+JBL,Jabil Inc,COWZ,2026-04-30
+J,Jacobs Solutions Inc,COWZ,2026-04-30
+COR,Cencora Inc,COWZ,2026-04-30
+ADP,Automatic Data Processing Inc,COWZ,2026-04-30
+BIIB,Biogen Inc,COWZ,2026-04-30
+BKNG,Booking Holdings Inc,COWZ,2026-04-30
+BMY,Bristol-Myers Squibb Co,COWZ,2026-04-30
+CDW,CDW Corp/DE,COWZ,2026-04-30
+CF,CF Industries Holdings Inc,COWZ,2026-04-30
+CAH,Cardinal Health Inc,COWZ,2026-04-30
+CHD,Church & Dwight Co Inc,COWZ,2026-04-30
+CTSH,Cognizant Technology Solutions,COWZ,2026-04-30
+CL,Colgate-Palmolive Co,COWZ,2026-04-30
+FTV,Fortive Corp,COWZ,2026-04-30
+ADBE,Adobe Inc,COWZ,2026-04-30
+ABNB,Airbnb Inc,COWZ,2026-04-30
+QCOM,QUALCOMM Inc,COWZ,2026-04-30
+DGX,Quest Diagnostics Inc,COWZ,2026-04-30
+REGN,Regeneron Pharmaceuticals Inc,COWZ,2026-04-30
+RMD,ResMed Inc,COWZ,2026-04-30
+WDAY,Workday Inc,COWZ,2026-04-30
+ZBH,Zimmer Biomet Holdings Inc,COWZ,2026-04-30
+ACN,Accenture PLC,COWZ,2026-04-30
+GIS,General Mills Inc,COWZ,2026-04-30
+GILD,Gilead Sciences Inc,COWZ,2026-04-30
+HCA,HCA Healthcare Inc,COWZ,2026-04-30
+HPQ,HP Inc,COWZ,2026-04-30
+HAL,Halliburton Co,COWZ,2026-04-30
+ILMN,Illumina Inc,COWZ,2026-04-30
+INCY,Incyte Corp,COWZ,2026-04-30
+ROP,Roper Technologies Inc,COWZ,2026-04-30
+SSNC,SS&C Technologies Holdings Inc,COWZ,2026-04-30
+CRM,Salesforce Inc,COWZ,2026-04-30
+SLB,SLB Ltd,COWZ,2026-04-30
+SNA,Snap-on Inc,COWZ,2026-04-30
+TMUS,T-Mobile US Inc,COWZ,2026-04-30
+TPR,Tapestry Inc,COWZ,2026-04-30
+TGT,Target Corp,COWZ,2026-04-30
+THC,Tenet Healthcare Corp,COWZ,2026-04-30
+TXT,Textron Inc,COWZ,2026-04-30
+EXE,Expand Energy Corp,COWZ,2026-04-30
+EXPE,Expedia Group Inc,COWZ,2026-04-30
+EXPD,Expeditors International of Wa,COWZ,2026-04-30
+FFIV,F5 Inc,COWZ,2026-04-30
+FSLR,First Solar Inc,COWZ,2026-04-30
+F,Ford Motor Co,COWZ,2026-04-30
+ZM,Zoom Communications Inc,COWZ,2026-04-30
+FLEX,Flex Ltd,COWZ,2026-04-30
+TWLO,Twilio Inc,COWZ,2026-04-30
+UBER,Uber Technologies Inc,COWZ,2026-04-30
+UAL,United Airlines Holdings Inc,COWZ,2026-04-30
+UPS,United Parcel Service Inc,COWZ,2026-04-30
+UTHR,United Therapeutics Corp,COWZ,2026-04-30
+VLO,Valero Energy Corp,COWZ,2026-04-30
+VEEV,Veeva Systems Inc,COWZ,2026-04-30
+FTI,TechnipFMC PLC,COWZ,2026-04-30
+CVS,CVS Health Corp,COWZ,2026-04-30
+CTRA,Coterra Energy Inc,COWZ,2026-04-30
+CMCSA,Comcast Corp,COWZ,2026-04-30
+COP,ConocoPhillips,COWZ,2026-04-30
+STZ,Constellation Brands Inc,COWZ,2026-04-30
+CPRT,Copart Inc,COWZ,2026-04-30
+CTVA,Corteva Inc,COWZ,2026-04-30
+DHI,DR Horton Inc,COWZ,2026-04-30
+DAL,Delta Air Lines Inc,COWZ,2026-04-30
+DVN,Devon Energy Corp,COWZ,2026-04-30
+FANG,Diamondback Energy Inc,COWZ,2026-04-30
+DG,Dollar General Corp,COWZ,2026-04-30
+DLTR,Dollar Tree Inc,COWZ,2026-04-30
+DD,DuPont de Nemours Inc,COWZ,2026-04-30
+EOG,EOG Resources Inc,COWZ,2026-04-30
+EQT,EQT Corp,COWZ,2026-04-30

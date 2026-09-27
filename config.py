@@ -185,14 +185,21 @@ ROLLING_HIGH_DAYS = 252  # trading days in a 52-week window
 # --------------------------------------------------------------------------
 LEADERSHIP_LOOKBACK_MONTHS = 24
 LEADERSHIP_HIGH_COUNT = 2
-# 6-K pre-filter: a filing goes to the LLM check only when its text or exhibit
-# descriptions contain at least one role keyword AND one action keyword
-# (case-insensitive, word-boundary match).
+# 6-K pre-filter: a filing goes to the LLM check only when a departure word
+# occurs within LEADERSHIP_KEYWORD_WINDOW_WORDS words of a CEO/CFO title, or a
+# "near_role" word sits right next to one ("interim CEO"). Entries are regexes,
+# matched case-insensitively except all-caps role acronyms. The narrow patterns
+# keep quarterly-report 6-Ks ("interim financial statements", "retirement
+# benefits", "succession planning") out of the LLM step.
 LEADERSHIP_KEYWORDS = {
-    "role": ["Chief Executive", "Chief Financial", "CEO", "CFO"],
-    "action": ["resign", "retire", "step down", "steps down", "stepping down",
-               "succession", "appoint", "interim"],
+    "role": [r"Chief Executive", r"Chief Financial", r"CEO", r"CFO"],
+    "departure": [r"resign\w*", r"retire(?!ment)\w*", r"step(?:s|ping|ped)? down", r"succession(?! plan)",
+                  r"succeed\w*", r"departure", r"leav(?:e|es|ing) the company"],
+    "near_role": [r"interim"],
 }
+LEADERSHIP_KEYWORD_WINDOW_WORDS = 12
+LEADERSHIP_NEAR_ROLE_WORDS = 2
+
 # 8-K Item 5.02 sentence-level matching: a departure needs a role term AND a
 # departure term in the same sentence (the Item caption itself is stripped).
 LEADERSHIP_ROLE_TERMS = {
@@ -294,34 +301,34 @@ THESIS_TRIGGER_FIELDS: list[str] = []  # filled in Phase 6
 # --------------------------------------------------------------------------
 # Screener universe (issuers change these URLs; keep them here, not in code)
 # --------------------------------------------------------------------------
-# Small-cap Cash Cows ticker confirmed as CALF on paceretfs.com (2026-09).
-# paceretfs.com sits behind a Cloudflare bot check, so these downloads often
-# fail; drop a manually downloaded file into data/universe/raw/<list>.csv|xlsx.
+# Each list tries its sources in order; a manually downloaded file in
+# data/universe/raw/<list>.csv|xlsx is used when all fail or when it is newer.
+# - S&P 400/600: SSGA SPDR daily holdings (iShares US CSVs now return an HTML gate).
+# - COWZ / CALF: paceretfs.com blocks automated requests (Cloudflare), so the
+#   holdings come from the funds' SEC N-PORT-P filings, which are public about
+#   60 days after the period end; as_of records that period. Small-cap Cash
+#   Cows ticker confirmed as CALF (2026-09).
+_SSGA = "https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/holdings-daily-us-en-{fund}.xlsx"
 UNIVERSE_SOURCES = {
-    "cowz": {
-        "label": "COWZ", "format": "pacer",
-        "url": "https://www.paceretfs.com/products/COWZ/holdings.csv",
-        "exchange": "US",
-    },
-    "cash_cows_small": {
-        "label": "CALF", "format": "pacer",
-        "url": "https://www.paceretfs.com/products/CALF/holdings.csv",
-        "exchange": "US",
-    },
-    "sp400": {
-        "label": "S&P 400", "format": "ishares",
-        "url": "https://www.ishares.com/us/products/239763/ishares-core-sp-midcap-etf/1467271812596.ajax?fileType=csv&fileName=IJH_holdings&dataType=fund",
-        "exchange": "US",
-    },
-    "sp600": {
-        "label": "S&P 600", "format": "ishares",
-        "url": "https://www.ishares.com/us/products/239774/ishares-core-sp-smallcap-etf/1467271812596.ajax?fileType=csv&fileName=IJR_holdings&dataType=fund",
-        "exchange": "US",
-    },
-    "tsx_composite": {
-        "label": "TSX Composite", "format": "ishares",
-        "url": "https://www.blackrock.com/ca/investors/en/products/239837/ishares-sptsx-capped-composite-index-etf/1464253357814.ajax?fileType=csv&fileName=XIC_holdings&dataType=fund",
-        "exchange": "TSX",
-    },
+    "cowz": {"label": "COWZ", "exchange": "US", "sources": [
+        {"format": "nport", "fund": "COWZ", "name": "SEC N-PORT (COWZ)"},
+    ]},
+    "cash_cows_small": {"label": "CALF", "exchange": "US", "sources": [
+        {"format": "nport", "fund": "CALF", "name": "SEC N-PORT (CALF)"},
+    ]},
+    "sp400": {"label": "S&P 400", "exchange": "US", "sources": [
+        {"format": "holdings", "name": "SSGA SPMD", "url": _SSGA.format(fund="spmd")},
+        {"format": "holdings", "name": "iShares IJH",
+         "url": "https://www.ishares.com/us/products/239763/ishares-core-sp-midcap-etf/1467271812596.ajax?fileType=csv&fileName=IJH_holdings&dataType=fund"},
+    ]},
+    "sp600": {"label": "S&P 600", "exchange": "US", "sources": [
+        {"format": "holdings", "name": "SSGA SPSM", "url": _SSGA.format(fund="spsm")},
+        {"format": "holdings", "name": "iShares IJR",
+         "url": "https://www.ishares.com/us/products/239774/ishares-core-sp-smallcap-etf/1467271812596.ajax?fileType=csv&fileName=IJR_holdings&dataType=fund"},
+    ]},
+    "tsx_composite": {"label": "TSX Composite", "exchange": "TSX", "sources": [
+        {"format": "holdings", "name": "iShares XIC",
+         "url": "https://www.blackrock.com/ca/investors/en/products/239837/ishares-sptsx-capped-composite-index-etf/1464253357814.ajax?fileType=csv&fileName=XIC_holdings&dataType=fund"},
+    ]},
 }
 MANUAL_UNIVERSE_LISTS = {"watchlist": "Watchlist", "dataroma": "Dataroma"}

@@ -26,12 +26,35 @@ SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 SUBMISSIONS_PAGE_URL = "https://data.sec.gov/submissions/{name}"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/{doc}"
 INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{acc}/index.json"
+FUND_TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers_mf.json"
+SERIES_FILINGS_URL = ("https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={series}"
+                      "&type={form}&dateb=&owner=include&count=10&output=atom")
+NPORT_DOC = "primary_doc.xml"
 
 # Tickers with an exchange suffix are never looked up by stripping it: the
 # bare symbol can belong to a different US company (CNR.TO is Canadian
 # National, but "CNR" on EDGAR is another issuer). Use the overrides CSV.
 FOREIGN_SUFFIX = re.compile(r"\.[A-Z]{1,3}$")
 DOMESTIC_FORMS = {"10-K", "10-Q", "10-K/A", "10-Q/A"}
+
+
+class FundSeries(BaseModel):
+    ticker: str
+    cik: int
+    series_id: str
+    class_id: str | None = None
+
+
+class NportFiling(BaseModel):
+    series_id: str
+    cik: int
+    accession: str
+    filing_date: date
+    xml: str
+
+    @property
+    def url(self) -> str:
+        return ARCHIVE_URL.format(cik=self.cik, acc=self.accession.replace("-", ""), doc=NPORT_DOC)
 
 
 class Filing(BaseModel):
@@ -137,6 +160,44 @@ class EdgarClient:
 
     def files_6k(self, cik: int) -> bool:
         return bool(self.forms_filed(cik) & {"6-K", "6-K/A"})
+
+    # -- funds (N-PORT) -----------------------------------------------------
+    def fund_series(self, ticker: str) -> FundSeries | None:
+        """Trust CIK and series ID for a fund ticker (company_tickers_mf.json)."""
+        data = self._json(FUND_TICKER_MAP_URL)
+        fields = data.get("fields", [])
+        for row in data.get("data", []):
+            rec = dict(zip(fields, row))
+            if str(rec.get("symbol", "")).upper() == ticker.upper():
+                return FundSeries(ticker=ticker.upper(), cik=int(rec["cik"]), series_id=rec["seriesId"],
+                                  class_id=rec.get("classId"))
+        return None
+
+    def series_filings(self, series_id: str, form: str = "NPORT-P") -> list[tuple[str, date]]:
+        """(accession, filing date) for a fund series, newest first (EDGAR atom feed by series ID)."""
+        xml = self._text_cached(SERIES_FILINGS_URL.format(series=series_id, form=form), kind="prices")
+        accs = re.findall(r"<accession-number>([^<]+)</accession-number>", xml)
+        dates = re.findall(r"<filing-date>([^<]+)</filing-date>", xml)
+        return sorted(((a.strip(), date.fromisoformat(d.strip())) for a, d in zip(accs, dates)),
+                      key=lambda x: x[1], reverse=True)
+
+    def latest_nport(self, fund_ticker: str) -> NportFiling:
+        """The newest N-PORT-P filing for a fund, with its holdings XML."""
+        series = self.fund_series(fund_ticker)
+        if series is None:
+            raise ProviderError(f"{fund_ticker} not found in the SEC fund ticker list")
+        filings = self.series_filings(series.series_id)
+        if not filings:
+            raise ProviderError(f"no N-PORT-P filings found for {fund_ticker} ({series.series_id})")
+        acc, filed = filings[0]
+        url = ARCHIVE_URL.format(cik=series.cik, acc=acc.replace("-", ""), doc=NPORT_DOC)
+        return NportFiling(series_id=series.series_id, cik=series.cik, accession=acc, filing_date=filed,
+                           xml=self.get_text(url))
+
+    def _text_cached(self, url: str, kind: str = "fundamentals") -> str:
+        if self.cache is None:
+            return self._get(url).text
+        return self.cache.fetch(f"edgar|{url}", kind, lambda: self._get(url).text)
 
     # -- documents --------------------------------------------------------
     def document_url(self, f: Filing, doc: str | None = None) -> str:

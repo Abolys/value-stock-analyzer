@@ -154,3 +154,17 @@ def test_snapshot_script_resumes_by_skipping_done_tickers(db_path, fx_provider):
     again = run(fx_provider, ["LULU", "MSFT", "JPM"], today=TODAY, db_path=db_path)
     assert again["LULU"].startswith("skipped") and again["MSFT"].startswith("skipped")
     assert not again["JPM"].startswith("skipped")
+
+
+def test_6k_filter_ignores_quarterly_report_wording():
+    text = (HANDMADE / "6k_quarterly_report.htm").read_text()
+    assert ld.keyword_hits(text) == []
+    assert ld.keyword_hits("Succession planning for the CEO role is overseen by the HR committee.") == []
+    assert ld.keyword_hits("The Chief Financial Officer will retire on June 30.") == ["Chief Financial", "retire"]
+    assert ld.keyword_hits("Jane Doe was named interim CEO.") == ["CEO", "interim"]
+
+
+def test_real_cnr_6ks_produce_no_unconfirmed_candidates(db_path):
+    r = ld.leadership_flag("CNR.TO", today=date(2026, 9, 26), edgar=fixture_edgar(), db_path=db_path,
+                           manual_path=db_path.parent / "none.csv")
+    assert r.layers_used == [ld.LAYER_6K] and r.unconfirmed_candidates == []
