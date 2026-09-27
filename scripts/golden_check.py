@@ -10,7 +10,10 @@ Phase 5 adds the dashboard: every ticker's Stock-page charts and a .docx export
 (real PNGs through kaleido) build without an exception, with the footer on every
 page, and each ticker's branch shows in the view (JPM's sector-adjusted tag,
 LCID's runway instead of a DCF heatmap, HTZ's break marked on the drawdown chart).
-Later phases extend CHECKS.
+Phase 6 adds the portfolio: every ticker is added as a holding from its analysis
+(purchase snapshot, levels, sell triggers), the alert check runs on it offline, its
+triggers and "then vs now" are evaluated and the export carries its thesis journal;
+JPM's net debt/EBITDA trigger reports "can't evaluate" (n/m), never a false fire.
 
     python scripts/golden_check.py
 """
@@ -79,7 +82,54 @@ def _analysis(provider: DataProvider, ticker: str, db_path: Path, today) -> dict
     llm = LLMClient(api=api, cache=LLMCache(Path(db_path).parent / "golden_llm_cache.db"), db_path=db_path)
     run = run_analysis(ScreenContext(provider=provider, db_path=db_path, today=today), ticker, llm=llm,
                        edgar=fixture_edgar())
-    return {"analysis": run, "llm_requests": api.requests, **_dashboard(provider, run, db_path)}
+    return {"analysis": run, "llm_requests": api.requests, **_dashboard(provider, run, db_path),
+            **_portfolio(provider, run, db_path, today)}
+
+
+def _portfolio(provider: DataProvider, run, db_path: Path, today) -> dict:
+    """Phase 6: a holding from the analysis, an offline alert check, the thesis check and the export."""
+    from datetime import datetime
+
+    from portfolio import store
+    from portfolio.alerts import check_alerts, journal_for
+    from portfolio.models import Thesis, Transaction, Trigger
+    from portfolio.thesis import default_levels, snapshot_of
+    from reports.build import build_report
+    from reports.images import Renderer
+
+    if run.load_error:
+        return {}
+    lv = default_levels(run)
+    triggers = [Trigger(field="piotroski", op="<", literal=5), Trigger(field="net_debt_ebitda", op=">", literal=3.5),
+                Trigger(field="price", op=">=", ref="target_price"),
+                Trigger(field="leadership.flag", op="==", literal="high"),
+                Trigger(field="dividend_at_risk", op="==", literal=True)]
+    thesis = Thesis(intrinsic_value=lv["intrinsic_value"], buy_below_price=lv["buy_below_price"],
+                    target_price=lv["target_price"], basis=lv["basis"], triggers=triggers)
+    px = run.screen.price.value if run.screen.price.ok else 1.0
+    hid = store.add_holding(run.ticker, "Golden", run.currency or "USD",
+                            Transaction(txn_date=today, side="buy", shares=10, price=px), thesis,
+                            snapshot=snapshot_of(run, thesis), snapshot_analysis_id=run.analysis_id, path=db_path)
+    ctx = ScreenContext(provider=provider, db_path=db_path, today=today)
+    rep = check_alerts(ctx, "golden", edgar=fixture_edgar(), tickers=[run.ticker],
+                       now=datetime.combine(today, datetime.min.time()), send_email=lambda alerts: "skipped - golden")
+    journal = journal_for(run.ticker, db_path)
+    no_png: Renderer = lambda fig: (None, "not rendered in the portfolio step")  # noqa: E731
+    report = build_report(run, {}, render=no_png, journal=journal)
+    return {"holding_id": hid, "alert_check": rep, "journal": journal, "journal_report": report}
+
+
+def _portfolio_line(r) -> str:
+    rep = r["alert_check"]
+    assert not rep.errors, f"alert check errors: {rep.errors}"
+    hj = next(j for j in r["journal"] if j.holding.holding_id == r["holding_id"])
+    check = hj.check
+    assert len(check.triggers) == 5 and check.then_now, "thesis check incomplete"
+    assert check.now_source.startswith("alert check"), check.now_source
+    assert any(s.title == "Thesis journal" for s in r["journal_report"].sections), "journal missing from the export"
+    states = ", ".join(f"{s.trigger.text}: {s.state}" for s in check.triggers)
+    return (f"portfolio: light {check.light}, {len(rep.fired)} alert(s) "
+            f"({', '.join(a.kind for a in rep.fired) or 'none'}); triggers {states}")
 
 
 def _dashboard(provider: DataProvider, run, db_path: Path) -> dict:
@@ -125,7 +175,8 @@ def _analysed(r) -> str:
     assert t.recovered_count + t.unrecovered_count == len(t.episodes)
     return (f"lenses Q {a.quant.display} ({a.quant.method}) / M {a.macro.display} / moat {a.moat.display} / "
             f"DA {a.devils_advocate.display} → {a.aggregate.display}; turnaround: {t.headline} "
-            f"({len(t.episodes)} episodes, {t.unrecovered_count} unrecovered); {_dash_line(r)}")
+            f"({len(t.episodes)} episodes, {t.unrecovered_count} unrecovered); {_dash_line(r)}; "
+            f"{_portfolio_line(r)}")
 
 
 def _screened(r) -> None:
@@ -219,6 +270,8 @@ def _jpm(r):
                          ("Beneish", s.beneish.status), ("EV/EBIT", s.earnings_yield.value.status)):
         assert status == f"n/m - {NM_FINANCIALS}", f"JPM {name} should be n/m, got {status}"
     assert s.asset_floor.ncav.is_nm and s.asset_floor.p_tbv.ok, "JPM: NCAV n/m, P/TBV kept"
+    trig = next(x for x in r["journal"][0].check.triggers if x.trigger.field == "net_debt_ebitda")
+    assert trig.state == "can't evaluate" and trig.current.startswith("n/m"), f"JPM leverage trigger {trig}"
     a = r["analysis"]
     assert a.quant.method == "excess_return", f"JPM Quant method {a.quant.method}"
     assert a.macro.reduced_data and a.macro.net_debt_ebitda.is_nm and a.macro.altman_z.is_nm, "JPM Macro reduced data"

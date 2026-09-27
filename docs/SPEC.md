@@ -89,7 +89,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `INSIDER_MARKER_SIZE_RANGE` | 8–22 px | Insider markers on the price panel, scaled by trade value |
 | `ESTIMATE_SCORING_EDGE` | `p75` | A past turnaround estimate's window runs from its run date to run date + the upper end of its interquartile range (`median` is the alternative). Recovered = a close within `RECOVERY_BAND` of the episode's prior high inside the window; missed = the window ended first; not yet = still open |
 | `ACCURACY_MIN_SCORED` | 10 | Below this many scored estimates, the Estimate accuracy page shows "Not enough scored estimates yet" |
-| `APP_VERSION` | 0.5.0 | Shown in the export footer |
+| `APP_VERSION` | 0.6.0 | Shown in the export footer |
 | `DCF_ADD_NET_CASH` | True | DCF bridge: fair value per share = (PV stage 1 + PV terminal + cash − debt) ÷ shares |
 | `REVERSE_DCF_TOLERANCE` / `REVERSE_DCF_MAX_ITERATIONS` | 1e-6 / 200 | Reverse-DCF bisection stopping rule |
 | Quant method for financials | Banks, insurers, other financials: fair P/B = ROE ÷ `COST_OF_CAPITAL` (zero-growth excess-return shortcut) × book value per share; the ROE spread replaces the ROIC adjustment. REITs: the same DCF on a TTM FFO base | Quant lens for sector-adjusted tickers (the reverse DCF and grid are n/m for the excess-return method) |
@@ -106,6 +106,17 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `LLM_BACKEND` | `auto` | `auto`: the Anthropic API when `ANTHROPIC_API_KEY` is set, else the Claude Code CLI (`claude -p`, Claude subscription); `api` / `claude_code` force one; `none` disables the LLM lenses |
 | `CLAUDE_CODE_CLI` / `CLAUDE_CODE_CLI_GLOBS` / `CLAUDE_CODE_TIMEOUT_SECONDS` | `.env` path, else `claude` on PATH, else the VS Code extension's bundled binary / 600 | Locating and running the CLI fallback; its calls log a billed cost of $0 plus the list-price equivalent |
 | `INDUSTRY_THREAT_HINTS` / `SECTOR_THREAT_HINTS` | e.g. Apparel Retail → brand / private-label erosion; Software → AI disruption; Banks → regulation and rates | Moat prompt: the sector-threat hint (industry prefix first, then sector) |
+| `ALERT_PIOTROSKI_DROP` | 2 | Alert when Piotroski falls this far below its baseline (the purchase snapshot for holdings, the first value seen for watchlist names); the baseline resets after an alert and rises with the score |
+| `THESIS_TRIGGER_FIELDS` | price, thesis levels, the four lens scores and the aggregate, piotroski, altman_z / altman_zone, beneish_flag, net_debt_ebitda, interest_coverage, fcf_yield, cash_runway_months, margin_of_safety, dcf_fair_value / dcf_upside, share_trend, drawdown, leadership.flag, insider_cluster_buy, dividend_at_risk, stale | The only fields a sell trigger may use, each with its type (number, bool, enum with choices) and direction (colours "then vs now") |
+| `THESIS_LEVEL_FIELDS` | target_price, buy_below_price, intrinsic_value | Thesis levels a numeric trigger can compare against (e.g. `price >= target_price`) |
+| `TRIGGER_OPERATORS` / `TRIGGER_EQUALITY_OPERATORS` | `<`, `<=`, `>`, `>=`, `==`, `!=` / `==`, `!=` | Trigger operators; bool and enum fields take only the equality ones |
+| `TRIGGER_NEAR_BAND` | 0.10 | Traffic light: a numeric trigger within 10% of its threshold (relative) is "near" (amber); a trigger whose value is N/A or n/m is amber too ("can't evaluate"), never a silent pass or fire |
+| `THEN_VS_NOW_FIELDS` | lens scores, aggregate, Piotroski, Altman Z'', net debt/EBITDA, FCF yield, margin of safety, DCF fair value, leadership flag, dividend at risk, price | Rows of the Portfolio "then vs now" comparison |
+| `COST_BASIS_METHOD` | `average` | Realised / unrealised gain on average cost (Canada's adjusted cost base rule); sells realise shares × (price − average cost) − fees |
+| `ALERT_CHECK_MIN_INTERVAL_MINUTES` / `ALERT_CHECK_LAUNCH_GRACE_SECONDS` | 60 / 60 | The app-start alert check (a background process) runs at most this often; a just-launched check counts as running for the grace period before its process records its pid |
+| `ALERT_INBOX_MAX` | 100 | Alerts listed in the Portfolio inbox, newest first |
+| `ALERT_KINDS` | buy_below, target, earnings, leadership, insider_cluster, piotroski_drop, trigger, stale | Alert types and their labels |
+| `SMTP_DEFAULT_PORT` / `SMTP_TIMEOUT_SECONDS` | 587 / 30 | Alert email over STARTTLS; off unless `SMTP_HOST` and `ALERT_EMAIL_TO` are set in `.env` |
 
 
 ## Data sources and their limits
@@ -267,6 +278,9 @@ The app also has to be useful after a purchase, where long holds make "thesis dr
   - Piotroski dropping by `ALERT_PIOTROSKI_DROP` (2) or more;
   - any sell trigger firing;
   - fundamentals going stale on a holding.
+  - Each alert fires once per event. Conditions (price levels, triggers, cluster buy, stale) fire when they turn on and re-arm once they clear; a value that is N/A or n/m leaves them unchanged. Events (earnings, departures, Piotroski drops) carry a unique key. The first check of a ticker records the event baselines without alerting.
+  - A check recomputes the deterministic lenses (Quant, Macro) only; Moat, Devil's Advocate and the aggregate come from the latest full analysis, labelled with its date.
+  - Return vs benchmark is index-equivalent: each buy's cash buys index units on the same day and each sell sells the same fraction of them; both sides are price returns on actual closes (dividends excluded, labelled).
   Alerts go to an in-app inbox (unread count in the sidebar). Optional email via SMTP settings in `.env` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `ALERT_EMAIL_TO`), off unless configured. Each alert fires once per event, not on every run.
 
 ## Golden test tickers

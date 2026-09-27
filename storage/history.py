@@ -125,6 +125,36 @@ def load_history(ticker: str, path: Path | str | None = None) -> list[HistoryRow
     return _load("AND ticker = ?", (ticker.upper(),), path)
 
 
+def load_run(analysis_id: int, path: Path | str | None = None):
+    """The stored AnalysisRun of one analysis (its result_json), or None."""
+    from analysis.models import AnalysisRun
+
+    with connect(_db(path)) as conn:
+        row = conn.execute("SELECT result_json FROM analysis_runs WHERE analysis_id = ?", (analysis_id,)).fetchone()
+    if not row or not row[0]:
+        return None
+    return AnalysisRun.model_validate_json(row[0])
+
+
+def latest_full_run(ticker: str, on_date: date | None = None, path: Path | str | None = None):
+    """The latest finished analysis of a ticker that loaded (no load error), optionally only one
+    started on `on_date` (the portfolio reuses today's run as a purchase snapshot)."""
+    from analysis.models import AnalysisRun
+
+    q = ("SELECT result_json FROM analysis_runs WHERE ticker = ? AND finished_at IS NOT NULL "
+         "AND result_json IS NOT NULL")
+    args: tuple = (ticker.upper(),)
+    if on_date is not None:
+        q, args = q + " AND substr(created_at, 1, 10) = ?", (*args, on_date.isoformat())
+    with connect(_db(path)) as conn:
+        rows = conn.execute(q + " ORDER BY created_at DESC, analysis_id DESC", args).fetchall()
+    for (blob,) in rows:
+        run = AnalysisRun.model_validate_json(blob)
+        if not run.load_error:
+            return run
+    return None
+
+
 def load_all_estimates(path: Path | str | None = None) -> list[HistoryRow]:
     """Every finished run that carries a turnaround range, across all tickers."""
     return _load("AND turnaround_p75 IS NOT NULL", (), path)

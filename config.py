@@ -381,7 +381,7 @@ SCREEN_LOG_DIR = ROOT / "storage" / "logs"
 # --------------------------------------------------------------------------
 # Dashboard, run history and export (Phase 5)
 # --------------------------------------------------------------------------
-APP_VERSION = "0.5.0"  # shown in every export footer
+APP_VERSION = "0.6.0"  # shown in every export footer
 # Headless Chrome for the export PNGs (kaleido). Kept inside the project (gitignored) so the same
 # browser is found whether the app runs from VS Code or a terminal; install it with
 # `python scripts/get_chrome.py`. A BROWSER_PATH environment variable overrides it.
@@ -483,8 +483,82 @@ ESTIMATE_REVISION_PERIODS = ["0y", "+1y", "0q"]  # eps_trend rows tried in order
 # --------------------------------------------------------------------------
 # Portfolio (Phase 6)
 # --------------------------------------------------------------------------
-ALERT_PIOTROSKI_DROP = 2
-THESIS_TRIGGER_FIELDS: list[str] = []  # filled in Phase 6
+ALERT_PIOTROSKI_DROP = 2  # Piotroski this far below its baseline (purchase snapshot / first seen) → alert
+# Sell triggers are structured rules (field, operator, value) on these fields only, validated on
+# save and never evaluated as text. type: number | bool | enum. direction: +1 higher is better,
+# −1 lower is better, 0 neutral (colours "then vs now" changes and decides nothing else).
+# Thesis levels (target_price, buy_below_price, intrinsic_value) can be a trigger's value too,
+# e.g. price >= target_price.
+THESIS_TRIGGER_FIELDS: dict[str, dict] = {
+    "price": {"label": "Price (actual latest)", "type": "number", "direction": 0},
+    "target_price": {"label": "Target price (thesis)", "type": "number", "direction": 0},
+    "buy_below_price": {"label": "Buy-below price (thesis)", "type": "number", "direction": 0},
+    "intrinsic_value": {"label": "Intrinsic value (thesis)", "type": "number", "direction": 0},
+    "quant_score": {"label": "Quant lens score", "type": "number", "direction": 1},
+    "macro_score": {"label": "Macro lens score", "type": "number", "direction": 1},
+    "moat_score": {"label": "Moat lens score", "type": "number", "direction": 1},
+    "devils_advocate_score": {"label": "Devil's Advocate score", "type": "number", "direction": 1},
+    "aggregate_score": {"label": "Aggregate score", "type": "number", "direction": 1},
+    "piotroski": {"label": "Piotroski F-score", "type": "number", "direction": 1},
+    "altman_z": {"label": "Altman Z''", "type": "number", "direction": 1},
+    "altman_zone": {"label": "Altman zone", "type": "enum", "direction": 0,
+                    "choices": ["distress", "grey", "safe"]},
+    "beneish_flag": {"label": "Beneish manipulation flag", "type": "bool", "direction": 0},
+    "net_debt_ebitda": {"label": "Net debt / EBITDA", "type": "number", "direction": -1},
+    "interest_coverage": {"label": "Interest coverage", "type": "number", "direction": 1},
+    "fcf_yield": {"label": "FCF yield (SBC-adjusted)", "type": "number", "direction": 1},
+    "cash_runway_months": {"label": "Cash runway (months)", "type": "number", "direction": 1},
+    "margin_of_safety": {"label": "Margin of safety (Graham)", "type": "number", "direction": 1},
+    "dcf_fair_value": {"label": "DCF fair value", "type": "number", "direction": 1},
+    "dcf_upside": {"label": "DCF upside", "type": "number", "direction": 1},
+    "share_trend": {"label": "Share-count trend (per year)", "type": "number", "direction": -1},
+    "drawdown": {"label": "Drawdown from 52-week high", "type": "number", "direction": -1},
+    "leadership.flag": {"label": "Leadership turnover flag", "type": "enum", "direction": 0,
+                        "choices": ["none", "flagged", "high"]},
+    "insider_cluster_buy": {"label": "Insider cluster buy", "type": "bool", "direction": 0},
+    "dividend_at_risk": {"label": "Dividend at risk", "type": "bool", "direction": 0},
+    "stale": {"label": "Fundamentals may be stale", "type": "bool", "direction": 0},
+}
+THESIS_LEVEL_FIELDS = ["target_price", "buy_below_price", "intrinsic_value"]  # usable as a trigger's value
+TRIGGER_OPERATORS = ["<", "<=", ">", ">=", "==", "!="]
+TRIGGER_EQUALITY_OPERATORS = ["==", "!="]  # the only ones allowed on bool and enum fields
+# Traffic light: a numeric trigger that hasn't fired but whose current value is within this
+# fraction of its threshold (relative, |value − threshold| ≤ 10% × |threshold|) is "near" (amber).
+TRIGGER_NEAR_BAND = 0.10
+# Rows of the "then vs now" comparison (fields of THESIS_TRIGGER_FIELDS, in display order).
+THEN_VS_NOW_FIELDS = ["quant_score", "macro_score", "moat_score", "devils_advocate_score", "aggregate_score",
+                      "piotroski", "altman_z", "net_debt_ebitda", "fcf_yield", "margin_of_safety", "dcf_fair_value",
+                      "leadership.flag", "dividend_at_risk", "price"]
+# Realised / unrealised gain: "average" = average cost (also Canada's adjusted cost base rule).
+COST_BASIS_METHOD = "average"
+COST_BASIS_METHODS = ("average",)
+# The app-start alert check (a background process) runs at most this often.
+ALERT_CHECK_MIN_INTERVAL_MINUTES = 60
+# A just-launched check counts as running for this long before its process has recorded its pid.
+ALERT_CHECK_LAUNCH_GRACE_SECONDS = 60
+ALERT_INBOX_MAX = 100  # alerts listed in the Portfolio inbox (newest first)
+ALERT_KINDS = {
+    "buy_below": "Price at or below buy-below",
+    "target": "Price at or above target",
+    "earnings": "New earnings reported",
+    "leadership": "New leadership departure",
+    "insider_cluster": "Insider cluster buy",
+    "piotroski_drop": "Piotroski drop",
+    "trigger": "Sell trigger fired",
+    "stale": "Fundamentals may be stale",
+}
+ALERT_LOG_DIR = ROOT / "storage" / "logs"
+
+
+def smtp_settings() -> dict[str, str]:
+    """SMTP settings from .env, read at call time; email alerts are off unless SMTP_HOST and
+    ALERT_EMAIL_TO are both set."""
+    return {k: os.getenv(k, "").strip() for k in
+            ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "ALERT_EMAIL_TO", "ALERT_EMAIL_FROM")}
+
+
+SMTP_DEFAULT_PORT = 587  # STARTTLS
+SMTP_TIMEOUT_SECONDS = 30
 
 # --------------------------------------------------------------------------
 # Screener universe (issuers change these URLs; keep them here, not in code)

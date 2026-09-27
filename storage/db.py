@@ -2,7 +2,8 @@
 adds the screen_runs / screen_results / screen_divergences tables (helpers in
 storage/screen_store.py); Phase 3 adds analysis_runs and llm_calls (helpers in
 storage/llm_store.py); Phase 5 adds the run-history columns on analysis_runs
-(helpers in storage/history.py); later phases add portfolio tables.
+(helpers in storage/history.py); Phase 6 adds the portfolio,
+journal and alert tables (helpers in portfolio/store.py).
 """
 
 from __future__ import annotations
@@ -97,6 +98,100 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     created_at TEXT NOT NULL,
     backend TEXT NOT NULL DEFAULT 'api',     -- api | claude_code
     list_price_cost REAL NOT NULL DEFAULT 0  -- estimated cost at API list prices
+);
+-- Phase 6: portfolio, thesis journal and alerts (helpers in portfolio/store.py)
+CREATE TABLE IF NOT EXISTS holdings (
+    holding_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    account TEXT NOT NULL,             -- free-text label, e.g. "TFSA"
+    currency TEXT NOT NULL,            -- currency the transactions are in
+    created_at TEXT NOT NULL,
+    snapshot_analysis_id INTEGER,      -- the full analysis run frozen at purchase
+    snapshot_json TEXT,                -- flattened metrics at purchase (portfolio/metrics.py)
+    closed INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS transactions (
+    txn_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    holding_id INTEGER NOT NULL,
+    txn_date TEXT NOT NULL,
+    side TEXT NOT NULL,                -- buy | sell
+    shares REAL NOT NULL,
+    price REAL NOT NULL,
+    fees REAL NOT NULL DEFAULT 0,
+    note TEXT
+);
+CREATE TABLE IF NOT EXISTS theses (
+    thesis_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    holding_id INTEGER NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    intrinsic_value REAL,
+    buy_below_price REAL,
+    target_price REAL,
+    basis TEXT                         -- where the intrinsic value came from
+);
+CREATE TABLE IF NOT EXISTS thesis_reasons (
+    reason_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thesis_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    still_holds INTEGER,               -- NULL = not reviewed yet
+    reviewed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS thesis_triggers (
+    trigger_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thesis_id INTEGER NOT NULL,
+    field TEXT NOT NULL,
+    op TEXT NOT NULL,
+    value_json TEXT NOT NULL,          -- {"literal": x} or {"ref": "target_price"}
+    created_at TEXT NOT NULL,
+    fired_at TEXT                      -- last time it fired (alerted)
+);
+CREATE TABLE IF NOT EXISTS journal_entries (
+    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    holding_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    kind TEXT NOT NULL,                -- note | trigger | alert | reason
+    text TEXT NOT NULL,
+    alert_id INTEGER
+);
+CREATE TABLE IF NOT EXISTS watch_levels (
+    ticker TEXT PRIMARY KEY,
+    buy_below_price REAL,
+    target_price REAL,
+    basis TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS alerts (
+    alert_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    holding_id INTEGER,
+    kind TEXT NOT NULL,                -- a config.ALERT_KINDS key
+    event_key TEXT NOT NULL,           -- what makes this event unique (fires once per event)
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    source TEXT NOT NULL,              -- screen | app_start | manual
+    read_at TEXT,
+    email_status TEXT,
+    UNIQUE (ticker, kind, event_key)
+);
+CREATE TABLE IF NOT EXISTS monitor_state (
+    ticker TEXT NOT NULL,
+    key TEXT NOT NULL,                 -- e.g. fundamentals_as_of, piotroski_baseline, active:<rule>
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (ticker, key)
+);
+CREATE TABLE IF NOT EXISTS alert_checks (
+    check_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    source TEXT NOT NULL,
+    status TEXT NOT NULL,              -- running | completed | failed: <reason>
+    tickers INTEGER DEFAULT 0,
+    fired INTEGER DEFAULT 0,
+    errors TEXT,                       -- JSON {ticker: reason}
+    email_status TEXT,
+    pid INTEGER,
+    log_path TEXT
 );
 """
 

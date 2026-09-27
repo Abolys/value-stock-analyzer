@@ -87,6 +87,18 @@ def header_tags(run: AnalysisRun) -> list[Tag]:
     return tags
 
 
+def held_tags(ticker: str, db_path=None) -> list[Tag]:
+    """A "Held (account)" tag per open holding of the ticker (Phase 6)."""
+    from portfolio import store
+
+    out = []
+    for h in store.list_holdings(ticker=ticker, path=db_path):
+        unread = store.unread_count(ticker, db_path)
+        out.append(Tag(text=f"Held ({h.account})", kind="success",
+                       tip=f"first bought {h.first_buy}; {unread} unread alert(s); see the Portfolio page"))
+    return out
+
+
 # --------------------------------------------------------------------------
 # Prices and peers behind the charts
 # --------------------------------------------------------------------------

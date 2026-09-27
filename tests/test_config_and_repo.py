@@ -41,6 +41,11 @@ SPEC_TABLE_CONSTANTS = [
     # Dashboard, history and export (Phase 5)
     "APP_VERSION", "SCREEN_ETA_MIN_DONE", "CHANGES_LIST_MAX", "HEATMAP_NEUTRAL_BAND", "INSIDER_MARKER_SIZE_RANGE",
     "ESTIMATE_SCORING_EDGE", "ACCURACY_MIN_SCORED",
+    # Portfolio, thesis journal and alerts (Phase 6)
+    "THESIS_TRIGGER_FIELDS", "THESIS_LEVEL_FIELDS", "TRIGGER_OPERATORS", "TRIGGER_EQUALITY_OPERATORS",
+    "TRIGGER_NEAR_BAND", "THEN_VS_NOW_FIELDS", "COST_BASIS_METHOD", "ALERT_CHECK_MIN_INTERVAL_MINUTES", "ALERT_KINDS",
+    "ALERT_CHECK_LAUNCH_GRACE_SECONDS", "ALERT_INBOX_MAX",
+    "SMTP_DEFAULT_PORT", "SMTP_TIMEOUT_SECONDS",
 ]
 
 
@@ -82,3 +87,13 @@ def test_no_yfinance_labels_outside_field_map():
         text = p.read_text()
         offenders += [f"{p.name}: {lab}" for lab in labels if re.search(re.escape(f'"{lab}"'), text)]
     assert not offenders, offenders
+
+
+def test_trigger_fields_are_well_formed():
+    for name, spec in config.THESIS_TRIGGER_FIELDS.items():
+        assert spec["type"] in ("number", "bool", "enum"), name
+        assert spec["direction"] in (-1, 0, 1), name
+        assert spec["type"] != "enum" or spec.get("choices"), name
+    assert set(config.THESIS_LEVEL_FIELDS) <= set(config.THESIS_TRIGGER_FIELDS)
+    assert set(config.THEN_VS_NOW_FIELDS) <= set(config.THESIS_TRIGGER_FIELDS)
+    assert set(config.TRIGGER_EQUALITY_OPERATORS) <= set(config.TRIGGER_OPERATORS)

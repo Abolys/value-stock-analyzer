@@ -25,7 +25,9 @@ from app import charts, services, ui
 from app import stock_view as sv
 from app.charts import ChartOut
 from app.views.raw import raw_data
+from app.views.thesis_form import add_holding_dialog
 from llm.client import LLMClient
+from portfolio.alerts import journal_for
 from reports.build import build_report
 from reports.docx_export import to_docx
 from reports.markdown import to_markdown
@@ -115,7 +117,8 @@ def draw_header(slot, run: AnalysisRun, ch: dict[str, ChartOut | None]) -> None:
         right.markdown(f"<div style='text-align:right;padding-top:1rem'>"
                        f"{ui.badge_html(sv.verdict_badge(run.aggregate), kind)}</div>", unsafe_allow_html=True)
         st.caption(sv.asof_line(run) + f" · {run.sector or 'N/A'} / {run.industry or 'N/A'} · {run.treatment}")
-        st.markdown(ui.tags_html(sv.header_tags(run)), unsafe_allow_html=True)
+        st.markdown(ui.tags_html(sv.header_tags(run) + sv.held_tags(run.ticker, config.RUNS_DB_PATH)),
+                    unsafe_allow_html=True)
         if ch.get("week52") is not None:
             ui.chart(ch["week52"])
         for n in run.notes:
@@ -299,16 +302,22 @@ def draw_history(slot, run: AnalysisRun, bundle: sv.PriceBundle | None) -> None:
                    "the same episode are greyed as 'same episode'.")
 
 
+def _journal(ticker: str):
+    """The thesis journal for the export when the ticker is (or was) held; None otherwise."""
+    return journal_for(ticker, config.RUNS_DB_PATH) or None
+
+
 def draw_export(slot, run: AnalysisRun, ch: dict[str, ChartOut | None]) -> None:
     with slot.container():
         name = f"{run.ticker}_{run.today or date.today()}"
         c1, c2 = st.columns(2)
-        c1.download_button("Export Markdown", data=lambda: to_markdown(build_report(run, ch)), file_name=f"{name}.md",
-                           mime="text/markdown", key=f"md-{run.ticker}", on_click="ignore")
-        c2.download_button("Export Word (.docx)", data=lambda: to_docx(build_report(run, ch)),
+        c1.download_button("Export Markdown", data=lambda: to_markdown(build_report(run, ch, journal=_journal(run.ticker))),
+                           file_name=f"{name}.md", mime="text/markdown", key=f"md-{run.ticker}", on_click="ignore")
+        c2.download_button("Export Word (.docx)", data=lambda: to_docx(build_report(run, ch, journal=_journal(run.ticker))),
                            file_name=f"{name}.docx", key=f"docx-{run.ticker}", on_click="ignore",
                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        st.caption("Charts are embedded as PNGs with every assumption, data gap and the footer on each page.")
+        st.caption("Charts are embedded as PNGs with every assumption, data gap and the footer on each page; "
+                   "a held ticker's export includes its thesis journal.")
         st.caption(f"Analysis {run.analysis_id}: API cost \\${run.total_cost:.4f} (cache hits cost \\$0) · "
                    f"input hash {run.input_hash[:12] if run.input_hash else 'N/A'}")
 
@@ -464,11 +473,27 @@ def render(provider) -> None:
         draw_all(lay, entry, provider)
         for err in entry.run.errors:
             st.error(f"Lens error: {err}")
+    else:
+        entry = run_progressive(provider, ticker, lay, llm, use_edgar)
+        store[ticker] = entry
+        if entry.run.load_error:
+            st.rerun()
+    with top[0]:
+        portfolio_button(entry.run)
+
+
+def portfolio_button(run: AnalysisRun) -> None:
+    """"Add to portfolio": the thesis form pre-filled from this analysis (its purchase snapshot). The form
+    stays open while st.session_state["add_to_portfolio"] names this ticker (set by the button or by the
+    Portfolio page; cleared on save or when the dialog is dismissed)."""
+    if run.load_error or run.analysis_id is None:
         return
-    entry = run_progressive(provider, ticker, lay, llm, use_edgar)
-    store[ticker] = entry
-    if entry.run.load_error:
-        st.rerun()
+    st.button("Add to portfolio", key=f"add-pf-{run.ticker}",
+              help="Record a buy with its thesis, levels and sell triggers; this analysis is frozen as the "
+                   "purchase snapshot",
+              on_click=lambda: st.session_state.__setitem__("add_to_portfolio", run.ticker))
+    if st.session_state.get("add_to_portfolio") == run.ticker:
+        add_holding_dialog(run)
 
 
 def show_load_error(ticker: str, error: str) -> None:

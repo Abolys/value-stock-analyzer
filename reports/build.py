@@ -113,8 +113,40 @@ def _lens_section(lens, label: str) -> Section:
     return sec
 
 
+def journal_section(journal: list) -> Section:
+    """The thesis, triggers and dated journal of every holding of the ticker (Phase 6)."""
+    sec = Section(title="Thesis journal")
+    if not journal:
+        sec.paragraphs.append("Not held: no thesis or journal.")
+        return sec
+    for hj in journal:
+        h, th = hj.holding, hj.holding.thesis
+        buy = h.first_buy.isoformat() if h.first_buy else "N/A"
+        sec.paragraphs.append(f"**{h.ticker} · {h.account}** ({h.currency}), first bought {buy}"
+                              f"{' · closed' if h.closed else ''}; purchase snapshot: analysis "
+                              f"{h.snapshot_analysis_id or 'N/A'}")
+        if th is not None:
+            lv = lambda v: f"{v:,.2f}" if v is not None else "not set"  # noqa: E731
+            sec.paragraphs.append(f"Intrinsic value {lv(th.intrinsic_value)} ({th.basis or 'basis not recorded'}); "
+                                  f"buy-below {lv(th.buy_below_price)}; target {lv(th.target_price)}")
+            if th.reasons:
+                sec.tables.append(Table(headers=["Reason", "Still holds?"], rows=[
+                    [r.text, "not reviewed" if r.still_holds is None else "yes" if r.still_holds else "no"]
+                    for r in th.reasons]))
+        if hj.check is not None and hj.check.triggers:
+            sec.tables.append(Table(headers=["Sell trigger", "Status", "Now", "Threshold"], rows=[
+                [t.trigger.text, t.state, t.current, t.threshold] for t in hj.check.triggers]))
+            sec.paragraphs.append(f"Trigger status from {hj.check.now_source or 'N/A'}")
+        if hj.entries:
+            sec.tables.append(Table(headers=["Date", "Kind", "Entry"], rows=[
+                [e.created_at.strftime("%Y-%m-%d %H:%M"), e.kind, e.text] for e in hj.entries]))
+        else:
+            sec.paragraphs.append("No journal entries yet.")
+    return sec
+
+
 def build_report(run: AnalysisRun, chart_map: dict[str, ChartOut | None],
-                 render: Renderer = render_png) -> Report:
+                 render: Renderer = render_png, journal: list | None = None) -> Report:
     rep = Report(ticker=run.ticker, title=f"{run.ticker} — {run.company}", footer=footer_text(run))
     fig = lambda key: _figure(chart_map.get(key), render)  # noqa: E731
     s = run.screen
@@ -206,6 +238,9 @@ def build_report(run: AnalysisRun, chart_map: dict[str, ChartOut | None],
     tur.figures += [f for f in (fig("turnaround_range"), fig("drawdown")) if f]
     rep.sections.append(tur)
 
+    if journal is not None:
+        rep.sections.append(journal_section(journal))
+
     assumptions = Section(title="Assumptions")
     assumptions.tables.append(Table(headers=["Constant", "Value"], rows=[
         [k, _fmt(getattr(config, k))] for k in (
@@ -233,11 +268,11 @@ def build_report(run: AnalysisRun, chart_map: dict[str, ChartOut | None],
 
 
 def export_both(run: AnalysisRun, chart_map: dict[str, ChartOut | None],
-                render: Renderer = render_png) -> tuple[str, bytes]:
+                render: Renderer = render_png, journal: list | None = None) -> tuple[str, bytes]:
     from reports.docx_export import to_docx
     from reports.markdown import to_markdown
 
-    rep = build_report(run, chart_map, render)
+    rep = build_report(run, chart_map, render, journal)
     return to_markdown(rep), to_docx(rep)
 
 

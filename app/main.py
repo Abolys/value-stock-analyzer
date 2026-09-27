@@ -1,5 +1,6 @@
 """Value Stock Analyzer — app shell: shared sidebar, the data-source banner and
-three pages (Screener, Stock, Estimate accuracy), following docs/ui-mockup.html.
+four pages (Screener, Stock, Portfolio, Estimate accuracy), following docs/ui-mockup.html.
+On start it launches the background alert check for holdings and the watchlist when one is due.
 
     streamlit run app/main.py
 """
@@ -16,8 +17,9 @@ if str(ROOT) not in sys.path:
 import streamlit as st  # noqa: E402
 
 import config  # noqa: E402
-from app import services, ui  # noqa: E402
-from app.views import accuracy, screener, stock  # noqa: E402
+from app import alert_jobs, services, ui  # noqa: E402
+from app.views import accuracy, portfolio, screener, stock  # noqa: E402
+from portfolio import store as pf_store  # noqa: E402
 from storage import llm_store  # noqa: E402
 
 st.set_page_config(page_title="Value Stock Analyzer", layout="wide")
@@ -47,7 +49,24 @@ def sidebar(report) -> None:
         cc_calls, cc_est = llm_store.month_claude_code(path=config.RUNS_DB_PATH)
         if cc_calls:
             st.caption(f"Claude Code (subscription) this month: {cc_calls} calls, ≈\\${cc_est:.2f} at API list prices")
+        unread = pf_store.unread_count(path=config.RUNS_DB_PATH)
+        checking = " · checking alerts…" if alert_jobs.running(config.RUNS_DB_PATH) else ""
+        if "portfolio" in ui.PAGES:
+            st.page_link(ui.PAGES["portfolio"], label=f"Alerts: {unread} unread{checking}", icon="🔔")
+        else:
+            st.caption(f"Alerts: {unread} unread{checking}")
         st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
+
+
+def start_alert_check() -> None:
+    """Once per session: launch the background alert check when one is due (never blocks the page)."""
+    if st.session_state.get("alert_check_started"):
+        return
+    st.session_state["alert_check_started"] = True
+    try:
+        alert_jobs.maybe_start(config.RUNS_DB_PATH)
+    except Exception as exc:  # the app must open even if the check can't start; say so
+        st.session_state["alert_check_error"] = f"Alert check not started: {type(exc).__name__}: {exc}"
 
 
 def main() -> None:
@@ -56,13 +75,17 @@ def main() -> None:
     ui.PAGES.update({
         "screener": st.Page(lambda: screener.render(provider), title="Screener", url_path="screener", default=True),
         "stock": st.Page(lambda: stock.render(provider), title="Stock", url_path="stock"),
+        "portfolio": st.Page(lambda: portfolio.render(provider), title="Portfolio", url_path="portfolio"),
         "accuracy": st.Page(lambda: accuracy.render(provider), title="Estimate accuracy", url_path="accuracy"),
     })
+    start_alert_check()
     page = st.navigation(list(ui.PAGES.values()))
     sidebar(report)
     if st.session_state.pop("goto_stock", False) and page.url_path != "stock":
         st.switch_page(ui.PAGES["stock"])
     ui.banner(report)
+    if st.session_state.get("alert_check_error"):
+        st.warning(st.session_state["alert_check_error"])
     page.run()
 
 

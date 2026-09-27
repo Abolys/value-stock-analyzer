@@ -38,4 +38,19 @@ Flagged in the spec as "verify when building":
 
 See "After the build" in `docs/BUILD_PROMPTS.md`: the weekly screen schedule, monthly universe refresh, the yfinance upgrade script, calibration after prompt changes, and the manual CSVs (Dataroma, leadership events, insider events).
 
+### Portfolio and alerts
+
+- Add a holding from a ticker's Stock page with **Add to portfolio**. The analysis on screen is frozen as the purchase snapshot, together with your reasons, levels and sell triggers.
+- Alerts for holdings and the watchlist are checked at three points:
+  - at the end of every completed `scripts/run_screen.py` run;
+  - on app start, as a background process at most every `ALERT_CHECK_MIN_INTERVAL_MINUTES`;
+  - on demand, with `python scripts/check_alerts.py` or **Check alerts now** on the Portfolio page.
+- To have the weekly screen check alerts too, schedule it with cron. For example, every Sunday at 02:00:
+
+  ```
+  0 2 * * 0  cd /path/to/value-stock-analyzer && .venv/bin/python scripts/run_screen.py --lists cowz,cash_cows_small,sp400,sp600,tsx_composite,watchlist,dataroma
+  ```
+
+- Email is off unless `SMTP_HOST` and `ALERT_EMAIL_TO` are set in `.env`. `SMTP_PORT` defaults to 587 (STARTTLS). `SMTP_USER` and `SMTP_PASSWORD` are used when set, and `ALERT_EMAIL_FROM` defaults to `SMTP_USER`. For Gmail, use an app password.
+
 Personal research tool, not investment advice.

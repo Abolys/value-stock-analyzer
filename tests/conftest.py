@@ -44,6 +44,21 @@ def _no_llm_key(monkeypatch, request, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_background_checks(monkeypatch):
+    """The app launches the alert check as a background process; tests record the launch instead."""
+    from app import alert_jobs
+
+    launched: list = []
+
+    def fake_launch(source="app_start", tickers=None, db_path=None):
+        launched.append((source, tickers))
+        return 0
+
+    monkeypatch.setattr(alert_jobs, "launch", fake_launch)
+    return launched
+
+
+@pytest.fixture(autouse=True)
 def _no_network(monkeypatch, request):
     if request.node.get_closest_marker("live"):
         return

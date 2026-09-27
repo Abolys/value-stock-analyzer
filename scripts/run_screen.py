@@ -6,6 +6,7 @@
 Writes to the screen_runs / screen_results tables in storage/runs.db. Exit
 codes: 0 completed, 1 nothing to run / bad arguments, 2 blocked by the health
 check, 3 stopped by the circuit breaker (resumable). VSA_DATA_SOURCE=fixtures runs it offline from tests/fixtures.
+A completed run then checks alerts for holdings and the watchlist (scripts/check_alerts.py).
 """
 
 from __future__ import annotations
@@ -60,7 +61,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     logging.info("run %s finished with status %r: %s attempted, %s passed stage 1, %s Pass, %s failed to load",
                  run.run_id, run.status, run.attempted, run.passed_stage1, run.passed_stage2, run.failed_to_load)
+    if run.status == store.COMPLETED:
+        _check_alerts(provider, args.db)
     return EXIT.get(run.status, 1)
+
+
+def _check_alerts(provider, db_path) -> None:
+    """Alerts for holdings and the watchlist at the end of every completed screen. A failure is
+    logged and never changes the screen's exit code."""
+    from scripts.check_alerts import run_check
+
+    try:
+        rep = run_check(provider, db_path, "screen")
+        logging.info("alert check %s: %d tickers, %d new alerts, %d errors, email %s", rep.check_id,
+                     len(rep.tickers), len(rep.fired), len(rep.errors), rep.email_status)
+    except Exception as exc:  # the screen itself completed; the alert check is reported separately
+        logging.exception("alert check after the screen failed: %s", exc)
 
 
 if __name__ == "__main__":
