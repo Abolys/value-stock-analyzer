@@ -382,6 +382,10 @@ SCREEN_LOG_DIR = ROOT / "storage" / "logs"
 # Dashboard, run history and export (Phase 5)
 # --------------------------------------------------------------------------
 APP_VERSION = "0.5.0"  # shown in every export footer
+# Headless Chrome for the export PNGs (kaleido). Kept inside the project (gitignored) so the same
+# browser is found whether the app runs from VS Code or a terminal; install it with
+# `python scripts/get_chrome.py`. A BROWSER_PATH environment variable overrides it.
+CHROME_DIR = ROOT / ".cache" / "chrome"
 UNIVERSE_REFRESH_STATUS_PATH = UNIVERSE_DIR / "refresh_status.json"  # written by scripts/refresh_universe.py
 SCREEN_ETA_MIN_DONE = 5  # tickers finished before the Screener shows an estimated time left
 CHANGES_LIST_MAX = 8  # tickers named per "Changes since last screen" card before "+n more"

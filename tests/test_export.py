@@ -105,3 +105,28 @@ def test_footer_names_dates_providers_and_version(lulu):
     assert f"Price as of {run.price_as_of}" in rep.footer
     assert f"Fundamentals as of {run.fundamentals_as_of}" in rep.footer
     assert all(p in rep.footer for p in run.providers) and f"v{config.APP_VERSION}" in rep.footer
+
+
+def test_project_chrome_is_used_unless_browser_path_is_set(tmp_path, monkeypatch):
+    import os
+
+    import config
+    from reports import images
+
+    exe = tmp_path / "chrome-linux64" / "chrome"
+    exe.parent.mkdir()
+    exe.write_text("")
+    monkeypatch.setattr(config, "CHROME_DIR", tmp_path)
+    saved = os.environ.pop("BROWSER_PATH", None)  # use_project_chrome sets it directly: restore by hand
+    try:
+        assert images.project_chrome() == exe
+        assert images.use_project_chrome() == str(exe) and os.environ["BROWSER_PATH"] == str(exe)
+        os.environ["BROWSER_PATH"] = "/opt/my/chrome"
+        assert images.use_project_chrome() == "/opt/my/chrome"  # an explicit override wins
+        del os.environ["BROWSER_PATH"]
+        monkeypatch.setattr(config, "CHROME_DIR", tmp_path / "empty")
+        assert images.project_chrome() is None and images.use_project_chrome() == ""
+    finally:
+        os.environ.pop("BROWSER_PATH", None)
+        if saved is not None:
+            os.environ["BROWSER_PATH"] = saved
