@@ -1,0 +1,43 @@
+---
+description: Build phase 5 of the value stock analyzer: Dashboard, run history and export
+---
+Phase 5: Dashboard, run history and export.
+
+Before planning, read CLAUDE.md (standing rules) and the docs/SPEC.md sections this phase touches. "The spec" below means those two files together. docs/BUILD_PROMPTS.md has the full six-phase plan for context. Plan first and wait for approval before writing code.
+
+Replace the plain sections with the finished UI. Read docs/ui-mockup.html first (see "UI reference" in the spec): match its page structure, content and hierarchy, as separate Streamlit pages (Screener, Stock, Estimate accuracy), with the shared sidebar. Follow the Charts section of the spec for all charts. Loading states on every slow call, and clear error states for invalid tickers and failed API calls.
+
+Sidebar: API spend this month (from the logged LLM costs), with the number of analyses behind it.
+
+Screener view:
+- A data-source banner at the top of every page when the health check fails, naming what failed and suggesting the upgrade script, plus a note that cached results are shown with their age.
+- A run header: its status (completed / stopped: source failing / blocked: health check failed), any "likely renamed upstream" fields, when the shown screen ran, which lists it covered, counts per stage, and a "failed to load" count that expands to the list of tickers and reasons.
+- A list picker (checkboxes for each universe list) showing each list's as-of date, with stale lists marked, plus the "Run new screen" button with a progress bar and estimated time left while a run is going.
+- A "Changes since last screen" panel above the table: new Pass, dropped from Pass, newly Incomplete, and newly stale, each a short clickable list. This is the weekly view.
+- A table that defaults to showing Pass only, with a status filter (Pass / Fail / Incomplete / All) and a source filter. Columns: Ticker, Source (e.g. "COWZ, Dataroma"), Margin of safety, FCF yield vs 10-year government yield (US or Canada, by trading currency; cash runway in months for FCF-negative names), Net debt/EBITDA, Share-count trend (%/yr), EV/EBIT earnings yield, Piotroski (x / 9), Trap risk (flag, with Altman zone and Beneish on hover), Quality score (with "n of 4"), Screen status (Pass / Fail (manual only) / Incomplete), Data as of (the fundamentals' period end, with a stale marker when flagged). Each metric cell is green or red against its config threshold; N/A and n/m cells are visibly different (e.g. grey "N/A" vs amber "n/m") and say why on hover. Sortable by any column and filterable by source. Sector-adjusted tickers are labelled and show their own metrics.
+- A scatter of margin of safety (x, %) vs quality score (y, 0-10), one point per ticker, following the table's current filters (Pass only by default), with a vertical line at zero margin of safety. Only the top SCATTER_LABEL_TOP_N points by quality plus margin of safety get text labels; every point shows ticker, name and both values on hover. Tickers without a computable margin of safety are left off and listed in a caption with the reason.
+- Clicking a table row or a scatter point opens that ticker's view.
+
+Per-ticker view:
+- Progressive loading: the header, 52-week bar and charts appear first; each lens result fills in as it finishes (Quant, Macro and Moat in parallel, the Devil's Advocate last), then the aggregate and turnaround. Each pending section shows what it's waiting on.
+- Header: the 52-week range bar from the spec Charts, the verdict badge ("6.8 / 10 — lean bullish, 4 of 4 lenses") and tags for high controversy, leadership turnover, sector-adjusted, and "fundamentals may be stale" when they apply. Under the header, one line: "Price as of <date> · Fundamentals as of <period end> (TTM)". The leadership tag always shows its coverage (e.g. "2 departures · 8-K, full history" or "No departures found · partial coverage, tracking since Oct 2026"); hovering lists the events with their source.
+- Fundamentals over time as small multiples (the spec Charts): stacked panels for price, revenue, net income and total debt on a shared time axis, each on its own scale, fundamentals at their quarterly period ends. No indexing of anything that can go negative.
+- Lens scores as the dot strip from the spec Charts (one 1-10 row per lens, a line at the aggregate, the Devil's Advocate gap shaded when the controversy flag fires, hollow labelled markers for insufficient data), above the lens tabs.
+- A peer strip (the spec Charts) for margin of safety, FCF yield vs risk-free, net debt/EBITDA and ROIC, using the peer-selection function from Phase 4, with the peers named on hover and their source noted.
+- Valuation: the base-case fair value with the sensitivity heatmap (the spec Charts), the fair-value range, and the reverse-DCF line ("Price implies −4%/yr growth; history shows +6%/yr"). For flagged cyclicals, raw and normalised fair values side by side with the peak-earnings note.
+- The trap-score panel (Piotroski, Altman Z'', Beneish meters), EV/EBIT with the net-cash flag when it applies, and an insider-activity summary with coverage (insider buy and sell markers also appear on the price panel of the small multiples).
+- A dividend panel for payers (per-share bars with cuts highlighted, FCF payout line, "at risk" flag), and a small context strip: insider ownership, short interest, analyst estimate revisions, each N/A with its reason when missing.
+- Lens tabs: each lens's rationale and assumptions, a "How this score was built" line showing the mapping steps, the Moat and Devil's Advocate evidence facts listed under their scores, a low-confidence marker when the Graham Number and DCF disagree, cash runway instead of DCF fair value for FCF-negative names, and the Devil's Advocate tab in a warning colour.
+- Turnaround outlook: a range bar (median marked, interquartile range as the bar), the confidence level, catalysts, active technical signals, and below it the price history with past drawdown episodes shaded in two colours by type (market-driven vs company-specific, with a legend), the benchmark as a faint line for comparison (stock and benchmark both indexed to 100 at the chart's start, keeping one y-axis), and corporate-action breaks marked as vertical lines. The survivorship caveat sits under the range bar in small text.
+
+Run history (/storage):
+- Save every analysis run to SQLite: ticker, timestamp, input hash, each lens score, aggregate, turnaround estimate and its confidence, the drawdown episode it belongs to, and the run's LLM tokens and cost.
+- A History tab per ticker: the aggregate verdict over time, and for past turnaround estimates, whether the price recovered within the estimated window (recovered / not yet / missed). Only the first estimate per drawdown episode is scored, measured from that run's date (the spec Turnaround estimate integrity); later ones are shown greyed as "same episode".
+- An "Estimate accuracy" page across all tickers: one stacked bar per episode type (market-driven, company-specific) showing recovered within window / still waiting / missed, with the count of scored estimates. Show "Not enough scored estimates yet" below 10. This is the check on whether Phase 4 is worth trusting.
+
+Export (/reports):
+- One-click export of the per-ticker view to Markdown and .docx (python-docx), with charts embedded as PNGs (kaleido), all assumptions and data gaps included, and the footer from the spec Charts on every page.
+
+Tests: the sensitivity heatmap colours cells relative to the current price and outlines the base case, the trap-score panel shows "Insufficient data" for a Piotroski with too few checks, insider markers render hollow for 10b5-1 sales, the dividend panel is hidden for non-payers, the 52-week bar places the marker correctly and labels the drawdown, the scatter follows the table filter and labels only the top N, the monthly spend sums logged costs, two runs in one drawdown episode count once in the accuracy scoring, the Estimate accuracy page shows the not-enough-data message below 10, the changes panel on two saved runs (a ticker that newly passed, one that dropped out, one that became stale), the table defaults to Pass only, the small-multiples chart never indexes net income (a fixture with a loss at the start), the dot strip shows a hollow marker for an insufficient-data lens and shades the controversy gap, the peer strip lists N/A and n/m peers below it, the export footer is present on every page, table colouring against thresholds, scatter exclusion caption, run history write/read, and a .docx export that opens and contains every section.
+
+Finish with the phase-completion checklist.

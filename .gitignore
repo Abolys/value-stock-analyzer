@@ -1,0 +1,41 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local data, caches and databases
+*.db
+*.sqlite
+*.sqlite3
+cache/
+.cache/
+data/cache/
+data/universe/raw/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Exports and OS files
+reports/output/
+.DS_Store
+Thumbs.db
+
+# SQLite side files (runs.db and the disk cache are covered by *.db / data/cache/)
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Streamlit local secrets
+.streamlit/secrets.toml
+
+# Tool caches
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/

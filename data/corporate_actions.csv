@@ -1,0 +1,2 @@
+ticker,date,type,note
+HTZ,2021-07-01,bankruptcy emergence,"Chapter 11 emergence (plan effective 2021-06-30); new equity's first trading day in the yfinance price series is 2021-07-01, and share count jumps ~153M to ~463M across it"

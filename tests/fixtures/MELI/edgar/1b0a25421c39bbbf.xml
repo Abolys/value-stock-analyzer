@@ -1,0 +1,134 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-05-22</periodOfReport>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0001099590</issuerCik>
+        <issuerName>MERCADOLIBRE INC</issuerName>
+        <issuerTradingSymbol>MELI</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001703893</rptOwnerCik>
+            <rptOwnerName>Aguzin Alejandro Nicolas</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>true</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>DR. LUIS BONAVITA 1294 OF.1733</rptOwnerStreet1>
+            <rptOwnerStreet2>TOWER II</rptOwnerStreet2>
+            <rptOwnerCity>MONTEVIDEO</rptOwnerCity>
+            <rptOwnerNonUSStateTerritory></rptOwnerNonUSStateTerritory>
+            <rptOwnerCountry>X3</rptOwnerCountry>
+            <rptOwnerZipCode>11300</rptOwnerZipCode>
+            <rptOwnerStateDescription>URUGUAY</rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>1</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>0</isTenPercentOwner>
+            <isOther>0</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-05-22</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>95</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>1655.01</value>
+                    <footnoteId id="F1"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>4850</value>
+                    <footnoteId id="F2"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-05-22</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>505</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>1656.10</value>
+                    <footnoteId id="F3"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>5355</value>
+                    <footnoteId id="F4"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <derivativeTable></derivativeTable>
+
+    <footnotes>
+        <footnote id="F1">The price reported in Column 4 is a weighted average price. These shares of common stock of MercadoLibre, Inc. (the &quot;Company&quot; and such shares, &quot;Common Stock&quot;) were sold in multiple transactions at prices ranging from $1,654.74 to $1,655.60, inclusive. The reporting person undertakes to provide to the Company, any security holder of the Company, or the staff of the Securities and Exchange Commission, upon request, full information regarding the number of shares of Common Stock sold at each separate price within the ranges set forth in footnotes (1) and (3) to this Form 4.</footnote>
+        <footnote id="F2">Represents 64 shares of Common Stock, subject to forfeiture and transfer restrictions until the next annual meeting of the shareholders of the Company (the &quot;Restricted Stock&quot;) and 4,786  shares of Common Stock.</footnote>
+        <footnote id="F3">The price reported in Column 4 is a weighted average price. These shares of Common Stock were sold in multiple transactions at prices ranging from $1,656.02 to $1,656.20, inclusive.</footnote>
+        <footnote id="F4">Represents 64 shares of Restricted Stock and 5,291 shares of Common Stock.</footnote>
+    </footnotes>
+
+    <remarks>The Power of Attorney for Nicolas Aguzin is filed as an exhibit to the Form 3 filed by Mr. Aguzin with the Securities and Exchange Commission on April 17, 2017, which is hereby incorporated by reference.</remarks>
+
+    <ownerSignature>
+        <signatureName>/s/ Jacobo Cohen Imach (Attorney-in-fact)</signatureName>
+        <signatureDate>2026-05-26</signatureDate>
+    </ownerSignature>
+</ownershipDocument>

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Value Stock Analyzer — UI Mockup</title>
+<!--
+  UI REFERENCE for Claude Code (Phases 5 and 6). See "UI reference" in CLAUDE.md.
+  - All tickers and numbers are FICTIONAL. Never copy them into code.
+  - Views are stacked here; in the app they are separate Streamlit pages
+    (Screener, Stock, Portfolio, Estimate accuracy) with a shared sidebar.
+  - The charts below are hand-drawn SVG sketches. Build the real ones in Plotly,
+    following the Charts section of CLAUDE.md. CLAUDE.md wins wherever they differ.
+-->
+<style>
+:root{
+  --surface-0:#f7f6f3;--surface-1:#fcfcfb;--surface-2:#ffffff;
+  --text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#898781;
+  --text-success:#27500a;--text-danger:#a32d2d;--text-warning:#854f0b;--text-accent:#0c447c;
+  --bg-success:#eaf3de;--bg-danger:#fcebeb;--bg-warning:#faeeda;--bg-accent:#e6f1fb;
+  --border:rgba(11,11,11,.10);--border-strong:rgba(11,11,11,.18);--radius:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --surface-0:#141413;--surface-1:#1a1a19;--surface-2:#222220;
+    --text-primary:#f0efec;--text-secondary:#c3c2b7;--text-muted:#898781;
+    --text-success:#97c459;--text-danger:#f09595;--text-warning:#ef9f27;--text-accent:#85b7eb;
+    --bg-success:#173404;--bg-danger:#501313;--bg-warning:#412402;--bg-accent:#042c53;
+    --border:rgba(255,255,255,.10);--border-strong:rgba(255,255,255,.18);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface-0);color:var(--text-primary);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;font-weight:500;margin:0 0 4px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.note{font-size:12px;color:var(--text-secondary);margin-bottom:1rem}
+.v{border-top:0.5px solid var(--border);padding-top:1rem;margin-top:1.75rem}
+.vt{font-size:16px;font-weight:500;margin:0 0 .75rem}
+.st{font-size:13px;font-weight:500;margin:1.1rem 0 .5rem}
+.l{font-size:12px;color:var(--text-secondary)}
+.card{background:var(--surface-1);border:0.5px solid var(--border);border-radius:var(--radius);padding:.7rem .9rem}
+.tag{font-size:11px;padding:2px 8px;border-radius:var(--radius);white-space:nowrap}
+.tw{background:var(--bg-warning);color:var(--text-warning)}.ta{background:var(--bg-accent);color:var(--text-accent)}.td{background:var(--bg-danger);color:var(--text-danger)}.ts{background:var(--bg-success);color:var(--text-success)}
+table.t{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+table.t th{font-weight:500;color:var(--text-secondary);text-align:left;padding:5px 4px;border-bottom:0.5px solid var(--border)}
+table.t td{padding:5px 4px;border-bottom:0.5px solid var(--border);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tscroll{overflow-x:auto}.tscroll table{min-width:640px}
+.g{color:var(--text-success)}.r{color:var(--text-danger)}.na{color:var(--text-muted)}.nm{color:var(--text-warning)}
+.track{position:relative;height:6px;background:var(--surface-2);border:0.5px solid var(--border);border-radius:3px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px}
+.box{border:0.5px solid var(--border-strong);border-radius:var(--radius);padding:6px 10px;font-size:12px;text-align:center;background:var(--surface-2)}
+</style>
+</head>
+<body>
+<main>
+<h1>Value Stock Analyzer — UI mockup</h1>
+<div class="note">Fictional tickers and numbers. Views are stacked here; in the app each is its own page with a shared sidebar.</div>
+
+<div class="vt">Screener</div>
+<div class="card" style="font-size:12px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center">
+<span class="tag ts">Completed</span><span>Sep 27, 2:10 AM</span><span class="l">1,384 screened · 412 passed stage 1 · 37 Pass · 9 failed to load</span><span class="l">96 refetched after earnings · rest from cache</span><span class="l">API spend this month: $3.40</span>
+</div>
+
+<div class="st">Changes since last screen</div>
+<div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+<div class="card"><div class="l">New Pass (3)</div><div style="font-size:13px;margin-top:4px">XYZ · NETC · ABC.TO</div></div>
+<div class="card"><div class="l">Dropped from Pass (2)</div><div style="font-size:13px;margin-top:4px">OLDV · RTLR</div></div>
+<div class="card"><div class="l">Newly Incomplete (1)</div><div style="font-size:13px;margin-top:4px">SPNC</div></div>
+<div class="card"><div class="l">Newly stale (4)</div><div style="font-size:13px;margin-top:4px">MNR.TO · +3</div></div>
+</div>
+
+<div class="st">Results <span class="l" style="font-weight:400">· showing Pass · all sources</span></div>
+<div class="tscroll"><table class="t"><thead><tr><th style="width:13%">Ticker</th><th style="width:15%">Source</th><th>MoS</th><th>FCF vs 10Y</th><th>Leverage</th><th>Shr/yr</th><th>EV/EBIT</th><th>F</th><th style="width:11%">Trap</th><th>Qual.</th></tr></thead>
+<tbody id="scr"></tbody></table></div>
+<div class="l" style="margin-top:4px">Leverage = net debt/EBITDA · grey N/A = data missing · amber n/m = not meaningful (hover for reason)</div>
+
+<div class="st">Margin of safety vs quality</div>
+<svg id="sc" viewBox="0 0 680 232" width="100%" role="img" aria-label="Scatter of margin of safety versus quality score for passing tickers"></svg>
+
+<div class="v"><div class="vt">Stock page · XYZ Corp</div>
+<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+<div><span style="font-size:18px;font-weight:500">XYZ Corp</span> <span class="l">$42.00 · Price as of Sep 26 · Fundamentals as of Jun 30 (TTM)</span></div>
+<span class="tag ta" style="font-size:13px;padding:4px 10px">5.7 / 10 — neutral · 4 of 4 lenses</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="tag tw">High controversy</span><span class="tag tw">Trap risk: Altman grey</span><span class="tag ta">Insider cluster buy</span><span class="tag tw">Leadership: 1 departure · 8-K, full history</span></div>
+<div style="margin-top:12px"><div class="track"><div style="position:absolute;left:38.7%;top:-5px;width:3px;height:16px;background:var(--text-primary)"></div></div>
+<div style="display:flex;justify-content:space-between;margin-top:5px" class="l"><span>52w low $30</span><span class="r">−31% from high</span><span>52w high $61</span></div></div>
+
+<div class="st">Lens scores</div><div id="strip"></div>
+<div class="l" style="margin-top:4px">Line = aggregate 5.7 · shaded = Devil's Advocate gap</div>
+
+<div class="st">Fundamentals over time</div>
+<div id="sm" class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+<div class="l" style="margin-top:4px">Triangles on price = insider open-market buys (Form 4)</div>
+
+<div class="st">Versus peers <span class="l" style="font-weight:400">· 5 peers from your universe lists</span></div><div id="peer"></div>
+
+<div class="grid2" style="margin-top:.5rem;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:start">
+<div><div class="st">Fair value sensitivity</div><table style="border-collapse:collapse;width:100%"><tbody id="hm"></tbody></table>
+<div class="l" style="margin-top:6px">Range $37–$63 · price implies ~+1%/yr, history +6%/yr</div></div>
+<div><div class="st">Value-trap scores</div>
+<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between"><span class="l">Piotroski</span><span style="font-weight:500">4 / 9</span></div><div id="pio" style="display:flex;gap:3px;margin-top:6px"></div></div>
+<div class="card" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between"><span class="l">Altman Z''</span><span style="font-weight:500">1.8 · grey</span></div><div style="position:relative;display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:6px"><div style="width:22%;background:#d03b3b"></div><div style="width:30%;background:#fab219"></div><div style="width:48%;background:#0ca30c"></div><div style="position:absolute;left:36%;top:0;width:3px;height:7px;background:var(--text-primary)"></div></div></div>
+<div class="card"><div style="display:flex;justify-content:space-between"><span class="l">Beneish M</span><span style="font-weight:500">−2.40 · no flag</span></div><div style="position:relative;height:7px;background:var(--surface-2);border-radius:4px;margin-top:6px"><div style="position:absolute;left:55%;top:-3px;width:2px;height:13px;background:var(--text-danger)"></div><div style="position:absolute;left:40%;top:0;width:3px;height:7px;background:var(--text-primary)"></div></div><div class="l" style="margin-top:4px">Probabilistic; false positives happen.</div></div>
+</div></div>
+
+<div class="st">Turnaround outlook</div>
+<div class="card">
+<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px"><span style="font-size:13px;font-weight:500">8–20 months · based on 3 past company-specific drops</span><span class="tag tw">Medium confidence</span></div>
+<div style="position:relative;height:8px;background:var(--surface-2);border-radius:4px;margin:14px 0 6px"><div style="position:absolute;left:33%;width:50%;height:8px;background:#2a78d6;opacity:.35;border-radius:4px"></div><div style="position:absolute;left:54%;top:-4px;width:2px;height:16px;background:#2a78d6"></div></div>
+<div style="display:flex;justify-content:space-between" class="l"><span>0</span><span>12 mo</span><span>24 mo</span></div>
+<div class="l" style="margin-top:8px">Near-term: insider cluster buy (3 insiders, Aug) · Williams %R leaving oversold · Catalysts: earnings Nov 6</div>
+<div class="l" style="margin-top:4px;font-size:11px">Based on companies still trading; ones that fell and were delisted aren't included, so real-world recovery odds are lower.</div>
+</div>
+<svg id="dd" viewBox="0 0 680 170" width="100%" style="margin-top:8px" role="img" aria-label="Indexed price history of XYZ against its benchmark, with past drawdown episodes shaded by type"></svg>
+<div style="display:flex;gap:14px;flex-wrap:wrap" class="l"><span><span class="dot" style="border-radius:2px;background:rgba(42,120,214,.3)"></span> Market-driven drop</span><span><span class="dot" style="border-radius:2px;background:rgba(235,104,52,.3)"></span> Company-specific drop</span><span><span style="display:inline-block;width:14px;border-top:2px solid #2a78d6;vertical-align:3px"></span> XYZ</span><span><span style="display:inline-block;width:14px;border-top:1.5px dashed #898781;vertical-align:3px"></span> S&amp;P 500</span></div>
+
+<div class="st">Dividend</div>
+<div class="grid2"><svg id="dv" viewBox="0 0 320 110" width="100%" role="img" aria-label="Annual dividend per share with one cut highlighted"></svg>
+<div class="card" style="font-size:12px"><div><span class="tag td">Dividend at risk</span></div><div style="margin-top:8px">Yield 3.8% · FCF payout 118% · 1 cut in 8 yrs</div><div class="l" style="margin-top:6px">Insider ownership 4.1% · Short interest 12% · Estimates revised down (90d)</div></div></div>
+</div>
+
+<div class="v"><div class="vt">Portfolio</div>
+<div class="tscroll"><table class="t"><thead><tr><th style="width:14%">Ticker</th><th>Account</th><th>Value</th><th>Gain</th><th>vs index</th><th>Triggers</th><th>Alerts</th></tr></thead><tbody>
+<tr><td>XYZ</td><td>TFSA</td><td>$8,400</td><td class="r">−14.3%</td><td class="r">−19.1 pts</td><td><span class="dot" style="background:#d03b3b"></span> 1 fired</td><td>2 new</td></tr>
+<tr><td>ABC.TO</td><td>RRSP</td><td>$12,150</td><td class="g">+21.5%</td><td class="g">+9.8 pts</td><td><span class="dot" style="background:#0ca30c"></span> ok</td><td>—</td></tr>
+<tr><td>DEF</td><td>Margin</td><td>$5,020</td><td class="g">+4.2%</td><td class="r">−2.6 pts</td><td><span class="dot" style="background:#fab219"></span> near</td><td>1 new</td></tr>
+</tbody></table></div>
+
+<div class="grid2" style="margin-top:1rem;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:start">
+<div><div class="st">XYZ · then vs now <span class="l" style="font-weight:400">· bought Mar 12</span></div>
+<table class="t"><thead><tr><th>Metric</th><th>At purchase</th><th>Now</th></tr></thead><tbody id="tvn"></tbody></table></div>
+<div><div class="st">Sell triggers</div>
+<div class="card" style="font-size:12px;line-height:1.9">
+<div><span class="dot" style="background:#d03b3b"></span> piotroski &lt; 5 <span class="l">— fired Aug 8 (now 4)</span></div>
+<div><span class="dot" style="background:#0ca30c"></span> net_debt_ebitda &gt; 3.5 <span class="l">— now 2.9</span></div>
+<div><span class="dot" style="background:#0ca30c"></span> price &gt;= 65 (target) <span class="l">— now 42</span></div></div>
+<div class="st">Alerts</div>
+<div class="card" style="font-size:12px;line-height:1.8">
+<div>• XYZ: sell trigger fired, Piotroski 6 → 4</div>
+<div>• XYZ: insider cluster buy (3 insiders)</div>
+<div>• DEF: new earnings reported, refresh analysis</div></div></div></div>
+</div>
+
+<div class="v"><div class="vt">Estimate accuracy</div>
+<div id="acc"></div>
+<div style="display:flex;gap:14px;margin-top:6px;flex-wrap:wrap" class="l"><span><span class="dot" style="border-radius:2px;background:#1baf7a"></span> Recovered in window</span><span><span class="dot" style="border-radius:2px;background:#b4b2a9"></span> Still waiting</span><span><span class="dot" style="border-radius:2px;background:#e34948"></span> Missed</span></div>
+</div>
+
+<div class="v"><div class="vt">How a ticker flows through the app</div>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+<div class="box">Universe lists<div class="l">COWZ, TSX, watchlist…</div></div><span class="l">→</span>
+<div class="box">Screener<div class="l">2 stages, weekly</div></div><span class="l">→</span>
+<div class="box">Lenses + signals<div class="l">Quant · Macro · Moat · DA</div></div><span class="l">→</span>
+<div class="box">Turnaround<div class="l">episodes · caveats</div></div><span class="l">→</span>
+<div class="box">Stock page<div class="l">export · history</div></div><span class="l">→</span>
+<div class="box">Portfolio<div class="l">thesis · alerts</div></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center"><span class="l">Data in:</span><span class="tag" style="background:var(--surface-1)">yfinance</span><span class="tag" style="background:var(--surface-1)">SEC EDGAR (8-K, 6-K, Form 4)</span><span class="tag" style="background:var(--surface-1)">Bank of Canada</span><span class="tag" style="background:var(--surface-1)">ETF holdings files</span><span class="tag" style="background:var(--surface-1)">Anthropic API (Moat, DA)</span><span class="tag" style="background:var(--surface-1)">Manual CSVs</span></div>
+</div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const INK=css('--text-primary'), MUTED=css('--text-muted'), SURF=css('--surface-0');
+const rows=[["VLUE","COWZ","+34%g","+3.1g","1.2g","−2.0%g","11.4%","8","","8.1"],["SAFR","COWZ, Dataroma","+41%g","+5.2g","0.8g","0.0%g","13.0%","7","","7.4"],["XYZ","TSX Comp.","+24%g","+2.4g","2.9g","−1.1%g","9.2%","4","Altman grey","5.9"],["ABC.TO","TSX Comp.","+22%g","+1.8g","1.9g","−0.5%g","8.7%","6","","6.6"],["NETC","S&P 600","+29%g","+4.0g","n/m","−3.2%g","n/m","7","","7.0"],["BANK","Watchlist","+21%g","N/A","n/m","−1.4%g","n/m","n/m","","6.1"]];
+$("scr").innerHTML=rows.map(r=>"<tr>"+r.map((c,i)=>{let cls="";if(c.endsWith("g")&&i>1&&i<6){cls="g";c=c.slice(0,-1)}if(c==="n/m")cls="nm";if(c==="N/A")cls="na";if(i===8&&c)return `<td><span class="tag tw">${c}</span></td>`;return `<td class="${cls}">${c}</td>`}).join("")+"</tr>").join("");
+
+const pts=[["VLUE",34,8.1,"#2a78d6",9,4],["SAFR",41,7.4,"#eb6834",9,4],["XYZ",24,5.9,"#1baf7a",9,14],["ABC.TO",22,6.6,"#eda100",9,-6],["NETC",29,7.0,"#e87ba4",9,4],["BANK",21,6.1,"#6250d6",-42,4]];
+const X=v=>60+(v+10)/60*590,Y=v=>190-(v-3)/7*170;let s=`<line x1="${X(0)}" y1="15" x2="${X(0)}" y2="190" stroke="#c3c2b7" stroke-dasharray="3 3"/><line x1="60" y1="190" x2="650" y2="190" stroke="#c3c2b7"/>`;
+[-10,0,10,20,30,40,50].forEach(v=>s+=`<text x="${X(v)}" y="206" font-size="11" fill="${MUTED}" text-anchor="middle">${v}%</text>`);[4,6,8,10].forEach(v=>s+=`<text x="50" y="${Y(v)+4}" font-size="11" fill="${MUTED}" text-anchor="end">${v}</text>`);
+pts.forEach(p=>s+=`<circle cx="${X(p[1])}" cy="${Y(p[2])}" r="6" fill="${p[3]}" stroke="${SURF}" stroke-width="2"/><text x="${X(p[1])+p[4]}" y="${Y(p[2])+p[5]}" font-size="11" fill="${INK}">${p[0]}</text>`);
+s+=`<text x="355" y="226" font-size="11" fill="${MUTED}" text-anchor="middle">Margin of safety</text><text x="14" y="100" font-size="11" fill="${MUTED}" transform="rotate(-90 14 100)" text-anchor="middle">Quality</text>`;$("sc").innerHTML=s;
+
+const L=[["Quant fundamental",7.0],["Macro & balance sheet",6.2],["Business moat",6.5],["Devil's advocate",3.1]],P=v=>((v-1)/9*100).toFixed(1)+"%";
+$("strip").innerHTML=L.map(([n,v],i)=>`<div style="display:grid;grid-template-columns:150px minmax(0,1fr) 30px;align-items:center;gap:10px;height:24px"><span class="l">${n}</span><div class="track">${i==3?`<div style="position:absolute;left:${P(v)};width:calc(${P(6.57)} - ${P(v)});height:6px;background:rgba(227,73,72,.25)"></div>`:""}<div style="position:absolute;left:${P(5.7)};top:-6px;width:1px;height:18px;background:var(--text-muted)"></div><div style="position:absolute;left:calc(${P(v)} - 6px);top:-4px;width:12px;height:12px;border-radius:50%;background:${i==3?"#e34948":"#2a78d6"}"></div></div><span style="font-size:12px;font-weight:500;text-align:right">${v.toFixed(1)}</span></div>`).join("");
+
+const interp=(kp,n)=>{const o=[];for(let i=0;i<n;i++){let a=kp[0],b=kp[kp.length-1];for(let k=0;k<kp.length-1;k++)if(i>=kp[k][0]&&i<=kp[k+1][0]){a=kp[k];b=kp[k+1];break}const t=b[0]===a[0]?0:(i-a[0])/(b[0]-a[0]);o.push(a[1]+(b[1]-a[1])*t+Math.sin(i*1.7)*0.6)}return o};
+const price=interp([[0,50],[6,55],[12,39],[20,54],[26,58],[30,43],[38,57],[44,61],[52,47],[59,42]],60);
+const bench=interp([[0,100],[6,104],[12,80],[20,102],[26,110],[30,108],[38,118],[44,124],[52,120],[59,122]],60);
+const path=(v,w,h,mn,mx,px=0)=>v.map((y,i)=>(i?"L":"M")+(px+i/(v.length-1)*w).toFixed(1)+","+(h-(y-mn)/(mx-mn)*h).toFixed(1)).join("");
+const panels=[["Price",price],["Revenue",[100,103,106,104,101,104,108,111,114,113,116,119,121,120,123,125,127,126,128,130]],["Net income",[8,9,10,7,-2,3,6,9,11,12,10,9,8,7,5,4,6,5,4,3]],["Total debt",[40,40,41,42,45,47,47,48,48,49,50,50,51,52,52,53,54,54,55,55]]];
+$("sm").innerHTML=panels.map(([n,v],k)=>{const mn=Math.min(...v),mx=Math.max(...v),pad=(mx-mn)*.1;let z="";if(mn<0){const zy=(70-(0-(mn-pad))/((mx+pad)-(mn-pad))*70).toFixed(1);z=`<line x1="0" x2="150" y1="${zy}" y2="${zy}" stroke="#c3c2b7" stroke-dasharray="2 2"/>`}let ins="";if(k===0)[55,56,57].forEach(i=>{const x=i/59*150,y=70-(v[i]-(mn-pad))/((mx+pad)-(mn-pad))*70+10;ins+=`<path d="M${x},${y} l4,7 h-8z" fill="#1baf7a"/>`});return `<div class="card" style="padding:.5rem .6rem"><div class="l">${n}</div><svg viewBox="0 0 150 80" width="100%" role="img" aria-label="${n} over time">${z}<path d="${path(v,150,70,mn-pad,mx+pad)}" fill="none" stroke="#2a78d6" stroke-width="1.8" stroke-linejoin="round"/>${ins}</svg></div>`}).join("");
+
+const peers=[["Margin of safety",[5,12,18,31,9],24,"%"],["FCF yield vs 10Y (pts)",[0.5,1.2,3.8,2.0,-0.4],2.4,""],["Net debt / EBITDA",[1.1,2.2,3.4,1.6,2.5],2.9,"x"],["ROIC",[7,11,14,9,6],10,"%"]];
+$("peer").innerHTML=peers.map(([n,v,me,u])=>{const mn=Math.min(...v,me),mx=Math.max(...v,me),q=x=>((x-mn)/(mx-mn)*92+4).toFixed(1)+"%";return `<div style="display:grid;grid-template-columns:150px minmax(0,1fr) 44px;gap:10px;align-items:center;height:24px"><span class="l">${n}</span><div class="track">${v.map(x=>`<div style="position:absolute;left:calc(${q(x)} - 4px);top:-2px;width:8px;height:8px;border-radius:50%;background:#b4b2a9"></div>`).join("")}<div style="position:absolute;left:calc(${q(me)} - 6px);top:-4px;width:12px;height:12px;border-radius:50%;background:#1baf7a"></div></div><span style="font-size:12px;text-align:right">${me}${u}</span></div>`}).join("");
+
+const R=["7%","8%","9%","10%","11%"],G=["−1%","+1.5%","+4%","+6.5%","+9%"],H=[[55,61,68,76,85],[46,51,57,63,70],[39,43,48,53,59],[34,37,41,45,50],[30,32,36,39,43]];
+let h=`<tr><td class="l" style="font-size:11px">rate \\ growth</td>${G.map(g=>`<td class="l" style="text-align:center;padding-bottom:3px">${g}</td>`).join("")}</tr>`;
+H.forEach((r,i)=>{h+=`<tr><td class="l" style="text-align:right;padding-right:6px">${R[i]}</td>`+r.map((v,j)=>{const d=(v-42)/42,a=Math.min(Math.abs(d)*1.1,.55);const bg=Math.abs(d)<.05?"rgba(136,135,129,.18)":d>0?`rgba(42,120,214,${a.toFixed(2)})`:`rgba(227,73,72,${a.toFixed(2)})`;return `<td style="background:${bg};text-align:center;font-size:12px;height:28px;border:2px solid transparent;${i==2&&j==2?"outline:2px solid var(--text-primary);outline-offset:-3px;font-weight:500":""}">$${v}</td>`}).join("")+"</tr>"});$("hm").innerHTML=h;
+$("pio").innerHTML=Array.from({length:9},(_,i)=>`<div style="flex:1;height:7px;border-radius:2px;background:${i<4?"#2a78d6":"var(--surface-2)"};border:0.5px solid var(--border)"></div>`).join("");
+
+const idx=price.map(p=>p/price[0]*100),mn=65,mx=135,W=620,Hh=140,ox=50,xp=i=>ox+i/59*W;
+let d=`<rect x="${xp(6)}" y="5" width="${xp(20)-xp(6)}" height="${Hh}" fill="rgba(42,120,214,.15)"/><rect x="${xp(26)}" y="5" width="${xp(38)-xp(26)}" height="${Hh}" fill="rgba(235,104,52,.15)"/><rect x="${xp(44)}" y="5" width="${xp(59)-xp(44)}" height="${Hh}" fill="rgba(235,104,52,.25)"/>`;
+[80,100,120].forEach(v=>{const y=5+Hh-(v-mn)/(mx-mn)*Hh;d+=`<line x1="${ox}" x2="${ox+W}" y1="${y}" y2="${y}" stroke="#c3c2b7" stroke-opacity=".4"/><text x="${ox-6}" y="${y+4}" font-size="11" fill="${MUTED}" text-anchor="end">${v}</text>`});
+d+=`<path d="${path(bench,W,Hh,mn,mx,ox)}" transform="translate(0,5)" fill="none" stroke="#898781" stroke-width="1.5" stroke-dasharray="4 3"/><path d="${path(idx,W,Hh,mn,mx,ox)}" transform="translate(0,5)" fill="none" stroke="#2a78d6" stroke-width="2"/><text x="${xp(51.5)}" y="20" font-size="11" fill="${MUTED}" text-anchor="middle">current drop</text><text x="${ox}" y="166" font-size="11" fill="${MUTED}">5 years ago</text><text x="${ox+W}" y="166" font-size="11" fill="${MUTED}" text-anchor="end">today</text>`;$("dd").innerHTML=d;
+
+const dps=[1.0,1.05,1.1,1.1,0.8,0.85,0.9,0.95];$("dv").innerHTML=dps.map((v,i)=>`<rect x="${10+i*38}" y="${95-v*70}" width="24" height="${v*70}" rx="3" fill="${i===4?"#e34948":"#2a78d6"}"/><text x="${22+i*38}" y="108" font-size="11" fill="${MUTED}" text-anchor="middle">'${19+i}</text>`).join("");
+
+const tv=[["Quant",7.4,7.0,1],["Macro",6.8,6.2,1],["Moat",6.5,6.5,1],["Devil's advocate",5.0,3.1,1],["Piotroski",6,4,1],["Net debt/EBITDA",2.1,2.9,-1],["Price","$49","$42",0]];
+$("tvn").innerHTML=tv.map(([n,a,b,dir])=>{let c="";if(typeof a==="number"&&a!==b)c=((b>a)===(dir>0))?"g":"r";if(n==="Price")c="r";return `<tr><td>${n}</td><td>${a}</td><td class="${c}">${b}</td></tr>`}).join("");
+
+const acc=[["Market-driven",14,9,3,2],["Company-specific",11,4,3,4]];
+$("acc").innerHTML=acc.map(([n,t,a,b,c])=>`<div style="display:grid;grid-template-columns:130px minmax(0,1fr) 60px;gap:10px;align-items:center;margin-bottom:8px"><span class="l">${n}</span><div style="display:flex;height:16px;border-radius:4px;overflow:hidden;gap:2px"><div style="width:${a/t*100}%;background:#1baf7a"></div><div style="width:${b/t*100}%;background:#b4b2a9"></div><div style="width:${c/t*100}%;background:#e34948"></div></div><span class="l">${a}/${t} hit</span></div>`).join("");
+</script>
+</body>
+</html>

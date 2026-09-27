@@ -1,0 +1,60 @@
+"""Shared test fixtures. Every test runs offline: sockets are blocked."""
+
+from __future__ import annotations
+
+import socket
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from data.cache import DiskCache  # noqa: E402
+from data.fixture_provider import fixture_provider  # noqa: E402
+
+HANDMADE = ROOT / "tests" / "fixtures" / "handmade"
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch, request):
+    if request.node.get_closest_marker("live"):
+        return
+
+    def guard(*_a, **_k):
+        raise RuntimeError("network access attempted in an offline test")
+
+    monkeypatch.setattr(socket.socket, "connect", guard)
+    monkeypatch.setattr(socket, "create_connection", guard)
+
+
+class Clock:
+    def __init__(self, now: datetime):
+        self.now = now
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+@pytest.fixture
+def clock():
+    return Clock(datetime(2026, 9, 1, 12, 0))
+
+
+@pytest.fixture
+def cache(tmp_path, clock):
+    return DiskCache(tmp_path / "cache.db", clock=clock)
+
+
+@pytest.fixture(scope="session")
+def fx_provider():
+    """The real YFinanceProvider code path fed from tests/fixtures."""
+    return fixture_provider()
+
+
+@pytest.fixture
+def db_path(tmp_path):
+    return tmp_path / "runs.db"

@@ -1,0 +1,8 @@
+﻿Fund Holdings as of,"Sep 24, 2026"
+ 
+Ticker,Name,Sector,Asset Class,Market Value,Weight (%),Notional Value,Shares,Price,Location,Exchange,Currency,FX Rate,Market Currency
+"RY","ROYAL BANK OF CANADA","Financials","Equity","2,710.00","7.69","2,710.00","9.00","282.11","Canada","Toronto Stock Exchange","CAD","1.00","CAD"
+"TECK.B","TECK RESOURCES SUBORDINATE VOTING","Materials","Equity","900.00","1.10","900.00","10.00","60.00","Canada","Toronto Stock Exchange","CAD","1.00","CAD"
+"CNR","CANADIAN NATIONAL RAILWAY","Industrials","Equity","1,500.00","3.10","1,500.00","10.00","150.00","Canada","Toronto Stock Exchange","CAD","1.00","CAD"
+"CAD","CAD CASH","Cash and/or Derivatives","Cash","50.00","0.10","50.00","50.00","1.00","Canada","-","CAD","1.00","CAD"
+"SXFZ6","S&P TSE 60 INDEX DEC 26","Cash and/or Derivatives","Futures","0.00","0.00","5,000.00","1.00","5,000.00","Canada","Montreal Exchange","CAD","1.00","CAD"
