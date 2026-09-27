@@ -15,7 +15,7 @@ import config
 from data import field_map as fm
 from data.provider import (
     AnalystEstimates, BatchPriceResult, DataProvider, EarningsDates, Freq, InfoResult,
-    PricePoint, ProviderError, SharesHistory, Statement, StatementKind, to_date_index,
+    PricePoint, ProviderError, ProviderUnavailable, SharesHistory, Statement, StatementKind, to_date_index,
 )
 from data.throttle import YF_THROTTLE, with_retries
 from data.values import is_missing
@@ -85,6 +85,20 @@ class YFinanceProvider(DataProvider):
         s.name = "adjusted_close" if adjusted else "close"
         s.attrs["provider"] = PROVIDER
         return s
+
+    def get_price_range(self, ticker: str) -> pd.DataFrame:
+        """Highs and lows scaled onto the adjusted closes (× Adj Close / Close for each day)."""
+        df = self._call(lambda: self._t(ticker).history(period=config.PRICE_HISTORY_PERIOD, auto_adjust=False))
+        cols = (fm.YF_PRICE_HIGH, fm.YF_PRICE_LOW, fm.YF_PRICE_CLOSE, fm.YF_PRICE_ADJ_CLOSE)
+        if df is None or df.empty or any(c not in df.columns for c in cols):
+            raise ProviderUnavailable(f"no daily highs and lows for {ticker}")
+        df = df[list(cols)].dropna()
+        df = df[df[fm.YF_PRICE_CLOSE] > 0]
+        factor = df[fm.YF_PRICE_ADJ_CLOSE] / df[fm.YF_PRICE_CLOSE]
+        out = pd.DataFrame({"high": to_date_index(df[fm.YF_PRICE_HIGH] * factor),
+                            "low": to_date_index(df[fm.YF_PRICE_LOW] * factor)})
+        out.attrs["provider"] = PROVIDER
+        return out
 
     def get_splits(self, ticker: str) -> pd.Series:
         s = self._call(lambda: self._t(ticker).splits)

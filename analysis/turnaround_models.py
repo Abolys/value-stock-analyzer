@@ -49,6 +49,7 @@ class Episode(BaseModel):
     recovery_date: date | None = None  # first close back within RECOVERY_BAND of peak_price
     drop: float  # 1 − trough / peak
     recovery_months: float | None = None  # from RECOVERY_CLOCK_START to recovery_date
+    months_from: dict[str, float] = Field(default_factory=dict)  # clock start (trough/threshold/peak) → months
     recovered: bool = False
     unrecovered_reason: str = ""
     episode_type: str = UNCLASSIFIED
@@ -130,6 +131,9 @@ class RecoveryStats(BaseModel):
     median_months: float
     p25_months: float
     p75_months: float
+    secondary_median_months: float | None = None  # same episodes, RECOVERY_CLOCK_SECONDARY
+    secondary_p25_months: float | None = None
+    secondary_p75_months: float | None = None
     note: str = ""
 
 
@@ -139,6 +143,11 @@ class TurnaroundResult(BaseModel):
     headline: str = ""
     median_months: float | None = None
     iqr_months: tuple[float, float] | None = None
+    clock: str = config.RECOVERY_CLOCK_START
+    secondary_clock: str = ""
+    secondary_median_months: float | None = None
+    secondary_iqr_months: tuple[float, float] | None = None
+    secondary_line: str = ""  # e.g. "From the first 25% fall: 5–14 months (median 8)"
     episodes_used: int = 0
     basis: str = ""
     basis_note: str = ""

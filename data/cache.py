@@ -185,6 +185,9 @@ class CachedProvider(DataProvider):
     def get_price_history(self, ticker, adjusted):
         return self._cached("prices", "get_price_history", ticker, adjusted)
 
+    def get_price_range(self, ticker):
+        return self._cached("prices", "get_price_range", ticker)
+
     def get_splits(self, ticker):
         return self._cached("prices", "get_splits", ticker)
 

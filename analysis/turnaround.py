@@ -100,6 +100,7 @@ class PriceHistory(BaseModel):
 
     ticker: str
     closes: pd.Series
+    ranges: pd.DataFrame | None = None  # adjusted daily "high" / "low", when the provider has them
     breaks: list[Break] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
@@ -120,7 +121,12 @@ def load_history(provider: DataProvider, ticker: str) -> PriceHistory:
     except ProviderError as exc:
         breaks = ca.load_manual_breaks(ticker)
         notes.append(f"break heuristic unavailable ({exc}); manual corporate-action list only")
-    return PriceHistory(ticker=ticker, closes=closes, breaks=breaks, notes=notes)
+    try:
+        ranges = provider.get_price_range(ticker)
+    except ProviderError as exc:
+        ranges = None
+        notes.append(f"daily highs and lows unavailable ({exc}); Williams %R is close-based")
+    return PriceHistory(ticker=ticker, closes=closes, ranges=ranges, breaks=breaks, notes=notes)
 
 
 def segments(closes: pd.Series, break_dates: list[date]) -> list[pd.Series]:
@@ -153,8 +159,12 @@ def _months(start: date, end: date) -> float:
     return (end - start).days / config.DAYS_PER_MONTH
 
 
-def _clock_start(peak: date, threshold: date, trough: date) -> date:
-    return {"trough": trough, "threshold": threshold, "peak": peak}[config.RECOVERY_CLOCK_START]
+CLOCKS = ("trough", "threshold", "peak")
+
+
+def clock_label(clock: str) -> str:
+    return {"trough": "from the trough", "threshold": f"from the first {config.DRAWDOWN_THRESHOLD:.0%} fall",
+            "peak": "from the prior high"}[clock]
 
 
 def find_episodes(seg: pd.Series, segment: int, ticker: str, unrecovered_reason: str) -> list[Episode]:
@@ -173,10 +183,11 @@ def find_episodes(seg: pd.Series, segment: int, ticker: str, unrecovered_reason:
         trough = peak + int(np.argmin(vals[peak:end + 1]))
         pk, th, tr = idx[peak].date(), idx[thr].date(), idx[trough].date()
         rd = idx[rec].date() if rec is not None else None
+        months = {c: _months(d, rd) for c, d in zip(CLOCKS, (tr, th, pk))} if rd else {}
         return Episode(ticker=ticker, segment=segment, peak_date=pk, peak_price=float(vals[peak]), threshold_date=th,
                        trough_date=tr, trough_price=float(vals[trough]), recovery_date=rd,
                        drop=1 - vals[trough] / vals[peak], recovered=rec is not None,
-                       recovery_months=_months(_clock_start(pk, th, tr), rd) if rd else None,
+                       recovery_months=months.get(config.RECOVERY_CLOCK_START), months_from=months,
                        unrecovered_reason="" if rec is not None else unrecovered_reason)
 
     for i, v in enumerate(vals):
@@ -238,6 +249,7 @@ class History(BaseModel):
     episodes: list[Episode]
     current: CurrentDrawdown
     last_segment: pd.Series
+    last_ranges: pd.DataFrame | None = None
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
@@ -266,17 +278,29 @@ def build_history(h: PriceHistory, bench: pd.Series | None, symbol: str, bench_r
         cur.note = (f"still inside an unrecovered episode that began {open_ep.peak_date} "
                     f"(−{1 - cur.latest_price / open_ep.peak_price:.0%} from that peak); the 52-week high has since "
                     f"rolled down to {cur.high_price:,.2f} on {cur.high_date}")
-    return History(ticker=h.ticker, segments=seg_models, episodes=episodes, current=cur, last_segment=segs[-1])
+    last = segs[-1]
+    ranges = h.ranges.reindex(last.index) if h.ranges is not None and not h.ranges.empty else None
+    return History(ticker=h.ticker, segments=seg_models, episodes=episodes, current=cur, last_segment=last,
+                   last_ranges=ranges)
 
 
 # --------------------------------------------------------------------------
 # Recovery statistics and confidence
 # --------------------------------------------------------------------------
-def _stats(eps: list[Episode], basis: str, typ: str, note: str) -> RecoveryStats:
-    months = [e.recovery_months for e in eps]
+def _quartiles(months: list[float]) -> tuple[float, float, float]:
     p25, med, p75 = (float(v) for v in np.percentile(months, [25, 50, 75]))
-    return RecoveryStats(basis=basis, episode_type=typ, episodes_used=len(eps), median_months=med,
-                         p25_months=p25, p75_months=p75, note=note)
+    return p25, med, p75
+
+
+def _stats(eps: list[Episode], basis: str, typ: str, note: str) -> RecoveryStats:
+    p25, med, p75 = _quartiles([e.recovery_months for e in eps])
+    st = RecoveryStats(basis=basis, episode_type=typ, episodes_used=len(eps), median_months=med,
+                       p25_months=p25, p75_months=p75, note=note)
+    alt = config.RECOVERY_CLOCK_SECONDARY
+    if alt and alt != config.RECOVERY_CLOCK_START and all(alt in e.months_from for e in eps):
+        st.secondary_p25_months, st.secondary_median_months, st.secondary_p75_months = \
+            _quartiles([e.months_from[alt] for e in eps])
+    return st
 
 
 def recovery_stats(episodes: list[Episode], current_type: str) -> tuple[RecoveryStats | None, bool, str]:
@@ -418,23 +442,30 @@ def macd_crossover(closes: pd.Series) -> TechnicalSignal:
     return sig
 
 
-def williams_r(closes: pd.Series) -> pd.Series:
-    """Close-based Williams %R (yfinance supplies closes only, not highs and lows)."""
-    hh = closes.rolling(config.WILLIAMS_R_PERIOD).max()
-    ll = closes.rolling(config.WILLIAMS_R_PERIOD).min()
+def williams_r(closes: pd.Series, ranges: pd.DataFrame | None = None) -> pd.Series:
+    """Williams %R over WILLIAMS_R_PERIOD days from daily highs and lows (adjusted like the
+    closes). Without them, or on a day one is missing, the close stands in."""
+    highs = lows = closes
+    if ranges is not None:
+        highs = ranges["high"].reindex(closes.index).fillna(closes).clip(lower=closes)
+        lows = ranges["low"].reindex(closes.index).fillna(closes).clip(upper=closes)
+    hh = highs.rolling(config.WILLIAMS_R_PERIOD).max()
+    ll = lows.rolling(config.WILLIAMS_R_PERIOD).min()
     rng = (hh - ll).where(hh > ll)
     return -100 * (hh - closes) / rng
 
 
-def williams_r_signal(closes: pd.Series) -> TechnicalSignal:
+def williams_r_signal(closes: pd.Series, ranges: pd.DataFrame | None = None) -> TechnicalSignal:
+    basis = "daily highs and lows" if ranges is not None else "close-based"
     params = {"period": config.WILLIAMS_R_PERIOD, "oversold": config.WILLIAMS_R_OVERSOLD,
-              "lookback_days": config.WILLIAMS_R_LOOKBACK_DAYS, "basis": "close-based"}
-    sig = TechnicalSignal(name="Williams %R rising out of oversold (close-based)", params=params)
+              "lookback_days": config.WILLIAMS_R_LOOKBACK_DAYS, "basis": basis}
+    name = "Williams %R rising out of oversold" + (" (close-based)" if ranges is None else "")
+    sig = TechnicalSignal(name=name, params=params)
     need = config.WILLIAMS_R_PERIOD + config.WILLIAMS_R_LOOKBACK_DAYS
     if len(closes) < need:
         sig.detail = f"Insufficient data - {len(closes)} closes in the latest segment (needs {need})"
         return sig
-    wr = williams_r(closes)
+    wr = williams_r(closes, ranges)
     now, before = wr.iloc[-1], wr.iloc[-config.WILLIAMS_R_LOOKBACK_DAYS - 1:-1]
     sig.as_of = closes.index[-1].date()
     if pd.isna(now):
@@ -487,8 +518,8 @@ def double_bottom(closes: pd.Series) -> TechnicalSignal:
     return sig
 
 
-def technical_signals(closes: pd.Series) -> list[TechnicalSignal]:
-    return [macd_crossover(closes), williams_r_signal(closes), double_bottom(closes)]
+def technical_signals(closes: pd.Series, ranges: pd.DataFrame | None = None) -> list[TechnicalSignal]:
+    return [macd_crossover(closes), williams_r_signal(closes, ranges), double_bottom(closes)]
 
 
 def insider_signal(ins: InsiderSummary | None, current: CurrentDrawdown | None, today: date) -> TechnicalSignal:
@@ -501,12 +532,13 @@ def insider_signal(ins: InsiderSummary | None, current: CurrentDrawdown | None, 
     if ins is None or not ins.available:
         sig.detail = f"insider data: {ins.coverage if ins else 'not loaded'}"
         return sig
-    buys = [t for t in ins.buys if current.high_date <= t.date <= today]
+    since = ins.history_since or ins.since
+    loaded = ins.history_buys if ins.history_since else ins.buys
+    buys = [t for t in loaded if current.high_date <= t.date <= today]
     window = cluster_buy(buys)
     partial = ""
-    if ins.since and ins.since > current.high_date:
-        partial = (f"; insider data covers {ins.since} onward only (INSIDER_LOOKBACK_MONTHS), the drawdown began "
-                   f"{current.high_date}")
+    if since and since > current.high_date:
+        partial = f"; insider data covers {since} onward only, the drawdown began {current.high_date}"
     sig.as_of = today
     if window:
         names = {t.insider for t in buys if window[0] <= t.date <= window[1]}
@@ -619,7 +651,7 @@ def turnaround(x: "AnalysisInputs", run: AnalysisRun | None, provider: DataProvi
     res.price_as_of = hist.current.as_of
     res.recovered_count = sum(e.recovered for e in hist.episodes)
     res.unrecovered_count = len(hist.episodes) - res.recovered_count
-    res.signals = technical_signals(hist.last_segment) + [insider_signal(x.insiders, hist.current, x.today)]
+    res.signals = technical_signals(hist.last_segment, hist.last_ranges) + [insider_signal(x.insiders, hist.current, x.today)]
 
     cur = hist.current
     if not cur.qualifying:
@@ -654,6 +686,12 @@ def turnaround(x: "AnalysisInputs", run: AnalysisRun | None, provider: DataProvi
 
     res.basis, res.basis_note, res.episodes_used = stats.basis, note, stats.episodes_used
     res.median_months, res.iqr_months = stats.median_months, (stats.p25_months, stats.p75_months)
+    if stats.secondary_median_months is not None:
+        res.secondary_clock = config.RECOVERY_CLOCK_SECONDARY
+        res.secondary_median_months = stats.secondary_median_months
+        res.secondary_iqr_months = (stats.secondary_p25_months, stats.secondary_p75_months)
+        res.secondary_line = (f"{clock_label(res.secondary_clock).capitalize()}: "
+                              f"{fmt_range(*res.secondary_iqr_months)} (median {res.secondary_median_months:.0f})")
     res.confidence = confidence_level(stats.episodes_used, downgrades)
     res.confidence_reasons.append(f"{stats.episodes_used} recovered episodes behind the range")
     if fallback:
@@ -662,7 +700,8 @@ def turnaround(x: "AnalysisInputs", run: AnalysisRun | None, provider: DataProvi
         res.confidence_reasons.append(f"{PEER_LABEL}: one level lower")
     kind = f"past {stats.episode_type} drops" if stats.episode_type != "all types" else "past drops of all types"
     where = f" at {len([p for p in res.peer_histories if p.episodes])} peers" if stats.basis == BASIS_PEERS else ""
-    res.headline = (f"{fmt_range(stats.p25_months, stats.p75_months)} (median {stats.median_months:.0f}), "
+    res.headline = (f"{fmt_range(stats.p25_months, stats.p75_months)} {clock_label(res.clock)} "
+                    f"(median {stats.median_months:.0f}), "
                     f"based on {stats.episodes_used} {kind}{where}")
     if stats.basis == BASIS_PEERS:
         res.headline += f" — {PEER_LABEL}"
@@ -673,6 +712,8 @@ def turnaround(x: "AnalysisInputs", run: AnalysisRun | None, provider: DataProvi
             res.headline = ("Withheld — the Devil's Advocate flags a structural impairment; the drop may not be "
                             "mean-reverting, so past recoveries aren't applied")
             res.median_months = res.iqr_months = res.confidence = None
+            res.secondary_median_months = res.secondary_iqr_months = None
+            res.secondary_line = ""
             res.confidence_reasons.append("structural impairment flag: range withheld")
         else:
             res.confidence = config.TURNAROUND_CONFIDENCE_LEVELS[0]
@@ -689,6 +730,8 @@ def _pct(v: float | None) -> str:
 def rationale(r: TurnaroundResult) -> str:
     lines = [f"**Turnaround outlook — {r.headline or r.status}**"]
     if r.confidence:
+        if r.secondary_line:
+            lines.append(r.secondary_line + " (same episodes, a different start for the clock)")
         lines.append(f"Confidence: {r.confidence} ({'; '.join(r.confidence_reasons)}). Rule: {r.confidence_rule}")
     if r.basis_note:
         lines.append(f"Basis: {r.basis or 'none'} — {r.basis_note}")

@@ -30,6 +30,10 @@ class InsiderSummary(BaseModel):
     cluster_buy: bool = False
     cluster_window: tuple[date, date] | None = None
     buys: list[InsiderTransaction] = Field(default_factory=list)
+    # Every open-market buy loaded (INSIDER_FETCH_MONTHS), for checks that reach past the
+    # summary window, such as a cluster buy during the current drawdown.
+    history_since: date | None = None
+    history_buys: list[InsiderTransaction] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
     @property
@@ -43,6 +47,12 @@ class InsiderSummary(BaseModel):
 
 def lookback_start(today: date) -> date:
     return (pd.Timestamp(today) - pd.DateOffset(months=config.INSIDER_LOOKBACK_MONTHS)).date()
+
+
+def fetch_start(today: date) -> date:
+    """How far back insider trades are loaded (the longer of the two windows)."""
+    months = max(config.INSIDER_FETCH_MONTHS, config.INSIDER_LOOKBACK_MONTHS)
+    return (pd.Timestamp(today) - pd.DateOffset(months=months)).date()
 
 
 def cluster_buy(buys: list[InsiderTransaction]) -> tuple[date, date] | None:
@@ -72,4 +82,7 @@ def insider_summary(data: InsiderData | None, today: date) -> InsiderSummary:
         sellers_10b5_1=len({t.insider for t in sells if t.is_10b5_1}),
         net_shares=sum(sign[t.type] * (t.shares or 0.0) for t in txs if t.shares is not None),
         net_value=sum(sign[t.type] * (t.value or 0.0) for t in txs if t.value is not None),
-        cluster_buy=window is not None, cluster_window=window, buys=buys, errors=list(data.errors))
+        cluster_buy=window is not None, cluster_window=window, buys=buys,
+        history_since=data.since or since,
+        history_buys=[t for t in data.transactions if t.type == "buy" and t.date <= today],
+        errors=list(data.errors))

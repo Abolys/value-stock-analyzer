@@ -29,9 +29,10 @@ from data.fixture_provider import ticker_dir  # noqa: E402
 from data.leadership import lookback_start  # noqa: E402
 
 # ABX.TO: a TSX company reporting in USD (currency conversion); USDCAD=X its FX pair;
-# ^TNX the US risk-free source.
+# ^TNX the US risk-free source; ^GSPTSE the Canadian turnaround benchmark.
 EXTRA_FULL = ["ABX.TO"]
-PRICE_ONLY = ["USDCAD=X", "^TNX"]
+PRICE_ONLY = ["USDCAD=X", "^TNX", "^GSPTSE"]
+PRICE_COLUMNS = ("Close", "Adj Close", "High", "Low")
 MAX_FORM4 = 20
 MAX_6K = 10
 MAX_DOMESTIC_MARKERS = 2
@@ -54,7 +55,7 @@ def capture_yf(ticker: str, full: bool = True) -> None:
     d.mkdir(parents=True, exist_ok=True)
     t = yf.Ticker(ticker)
     hist = t.history(period=config.PRICE_HISTORY_PERIOD if ticker != "HTZ" else "max", auto_adjust=False)
-    _save_frame(hist[[c for c in ("Close", "Adj Close") if c in hist.columns]], d / "prices.csv")
+    _save_frame(hist[[c for c in PRICE_COLUMNS if c in hist.columns]], d / "prices.csv")
     meta = {"captured_on": date.today().isoformat(), "yfinance_version": yf.__version__, "ticker": ticker}
     if full:
         (d / "info.json").write_text(json.dumps(t.info, default=str, indent=1))

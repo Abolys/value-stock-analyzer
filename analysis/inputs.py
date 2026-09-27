@@ -27,7 +27,7 @@ from screening.models import STATUS_FAILED_TO_LOAD, ScreenResult
 from signals.context import ContextFields, context_fields
 from signals.cyclicality import Cyclicality, cyclicality
 from signals.dividends import DividendSafety, dividend_safety
-from signals.insider_activity import InsiderSummary, insider_summary, lookback_start
+from signals.insider_activity import InsiderSummary, fetch_start, insider_summary
 
 
 class AnalysisLoadError(Exception):
@@ -93,7 +93,7 @@ def load_inputs(ctx: ScreenContext, ticker: str, edgar: EdgarClient | None = Non
     # Officer snapshots and the manual CSV work without EDGAR; 8-K / 6-K / Form 4 need it.
     kw = {"confirm": confirm} if confirm is not None else {}
     lead = leadership_flag(ticker, today=ctx.today, edgar=edgar, db_path=ctx.db_path, **kw)
-    ins = collect_insider_data(ticker, edgar, lookback_start(ctx.today))
+    ins = collect_insider_data(ticker, edgar, fetch_start(ctx.today))
     if edgar is None:
         notes.append("EDGAR not loaded: leadership from officer snapshots and the manual CSV only; "
                      "insiders from the manual CSV only")

@@ -496,3 +496,113 @@ def test_run_analysis_attaches_the_turnaround(fx_provider, tmp_path):
     assert run.turnaround.benchmark == "SPY" and run.turnaround.episodes
     stored = AnalysisRun.model_validate_json(run.model_dump_json())
     assert stored.turnaround.episodes == run.turnaround.episodes
+
+
+# --------------------------------------------------------------------------
+# Second recovery clock
+# --------------------------------------------------------------------------
+def test_second_clock_reports_the_same_episodes_from_the_threshold():
+    stock, bench = scenario_a()
+    r, _ = estimate(stock, bench)
+    assert r.clock == "trough" and r.secondary_clock == "threshold"
+    used = [e for e in r.episodes if e.recovered and e.episode_type == COMPANY_SPECIFIC]
+    assert r.secondary_median_months == pytest.approx(float(np.median([e.months_from["threshold"] for e in used])))
+    assert r.secondary_median_months > r.median_months  # the threshold comes before the trough
+    assert r.secondary_line.startswith("From the first 25% fall:") and r.secondary_line in r.rationale
+    assert "months from the trough" in r.headline
+    for e in used:
+        assert e.months_from["peak"] >= e.months_from["threshold"] >= e.months_from["trough"] == e.recovery_months
+
+
+def test_second_clock_hidden_when_configured_off_and_cleared_when_withheld(monkeypatch):
+    stock, bench = scenario_a()
+    withheld, _ = estimate(stock, bench, run=run_with_da("structural"))
+    assert withheld.secondary_line == "" and withheld.secondary_iqr_months is None
+    monkeypatch.setattr(config, "RECOVERY_CLOCK_SECONDARY", "")
+    r, _ = estimate(stock, bench)
+    assert r.has_range and r.secondary_line == "" and r.secondary_median_months is None
+
+
+# --------------------------------------------------------------------------
+# Williams %R from daily highs and lows
+# --------------------------------------------------------------------------
+def test_williams_r_uses_daily_highs_and_lows_when_available():
+    fall, _ = build([(30, 70.0, 0.0)])
+    bounce = pd.concat([fall, pd.Series([74.0, 80.0], index=pd.bdate_range(fall.index[-1] + timedelta(days=1),
+                                                                          periods=2))])
+    # Intraday highs well above the closes widen the range: the same bounce is still oversold.
+    ranges = pd.DataFrame({"high": bounce * 2.0, "low": bounce * 0.99}, index=bounce.index)
+    sig = williams_r_signal(bounce, ranges)
+    assert sig.params["basis"] == "daily highs and lows" and "close-based" not in sig.name
+    assert not sig.active
+    tight = pd.DataFrame({"high": bounce * 1.01, "low": bounce * 0.99}, index=bounce.index)
+    assert williams_r_signal(bounce, tight).active
+
+
+def test_fixture_highs_and_lows_are_adjusted_like_the_closes(fx_provider):
+    closes = fx_provider.get_price_history("SPY", adjusted=True)
+    ranges = fx_provider.get_price_range("SPY")
+    assert ranges.attrs["provider"] == "yfinance"
+    joined = ranges.join(closes.rename("close"), how="inner")
+    assert len(joined) == len(closes)
+    assert (joined["high"] >= joined["close"] - 1e-6).all() and (joined["low"] <= joined["close"] + 1e-6).all()
+    h = load_history(fx_provider, "LULU")
+    assert h.ranges is not None and not any("close-based" in n for n in h.notes)
+
+
+def test_turnaround_falls_back_to_close_based_without_highs_and_lows():
+    stock, bench = scenario_a()
+    r, _ = estimate(stock, bench)  # FakeProvider has no get_price_range
+    assert any("Williams %R is close-based" in n for n in r.notes)
+    assert any(s.name == "Williams %R rising out of oversold (close-based)" for s in r.signals)
+
+
+# --------------------------------------------------------------------------
+# Insider window covers the whole drawdown
+# --------------------------------------------------------------------------
+def _long_drawdown():
+    from analysis.turnaround_models import CurrentDrawdown
+
+    high = TODAY - timedelta(days=300)  # older than INSIDER_LOOKBACK_MONTHS, inside the 52-week window
+    return CurrentDrawdown(drawdown=0.4, as_of=TODAY, high_date=high, high_price=100, latest_price=60,
+                           qualifying=True, trough_date=TODAY, trough_price=60)
+
+
+def test_insider_cluster_buy_older_than_the_summary_window_but_inside_the_drawdown():
+    from signals.insider_activity import fetch_start
+
+    old_buys = _insiders([TODAY - timedelta(days=d) for d in (250, 245, 240)]).buys
+    summary = InsiderSummary(coverage="manual", since=TODAY - timedelta(days=183), buys=[],
+                             history_since=fetch_start(TODAY), history_buys=old_buys)
+    sig = insider_signal(summary, _long_drawdown(), TODAY)
+    assert sig.active and "3 insiders bought" in sig.detail and "onward only" not in sig.detail
+    # Without the longer history the window is reported as partial.
+    short = InsiderSummary(coverage="manual", since=TODAY - timedelta(days=183), buys=[])
+    assert "onward only" in insider_signal(short, _long_drawdown(), TODAY).detail
+
+
+def test_insider_summary_keeps_6_months_but_carries_12_months_of_buys():
+    from data.insiders import InsiderData
+    from signals.insider_activity import fetch_start, insider_summary
+
+    txs = _insiders([TODAY - timedelta(days=d) for d in (300, 250, 30)]).buys
+    s = insider_summary(InsiderData(ticker="TEST", since=fetch_start(TODAY), transactions=txs, coverage=["manual"]),
+                        TODAY)
+    assert s.buyers == 1 and len(s.buys) == 1  # the 6-month summary is unchanged
+    assert len(s.history_buys) == 3 and s.history_since == fetch_start(TODAY)
+    assert fetch_start(TODAY) == (pd.Timestamp(TODAY) - pd.DateOffset(months=config.INSIDER_FETCH_MONTHS)).date()
+
+
+# --------------------------------------------------------------------------
+# Canadian benchmark on real saved data
+# --------------------------------------------------------------------------
+def test_abx_to_is_classified_against_the_saved_tsx_index(fx_provider, db_path):
+    from tests.analysis_helpers import fixture_inputs
+
+    x = fixture_inputs(fx_provider, "ABX.TO", db_path)  # CNR.TO never fell 25%
+    r = turnaround(x, None, fx_provider, db_path)
+    assert r.benchmark == "^GSPTSE" and r.episodes
+    assert all(e.benchmark == "^GSPTSE" and e.episode_type != "unclassified" for e in r.episodes), \
+        [e.classification_note for e in r.episodes]
+    assert {e.episode_type for e in r.episodes} == {COMPANY_SPECIFIC, MARKET_DRIVEN}
+    assert not any("unclassified" in n for n in r.notes)

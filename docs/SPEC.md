@@ -34,13 +34,14 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `ROLLING_HIGH_DAYS` | 252 | Trading days in the rolling 52-week high (computed within one corporate-action segment only) |
 | `LISTING_COUNTRY_SUFFIXES` / `LISTING_COUNTRY_DEFAULT` | `.TO`, `.V`, `.NE`, `.CN` → CA / US | Listing country from the ticker suffix; picks the `BENCHMARKS` index |
 | `RECOVERY_CLOCK_START` | `trough` | Recovery time runs from the episode's trough (alternatives: `threshold`, `peak`) to the first close back within `RECOVERY_BAND` of the prior high |
+| `RECOVERY_CLOCK_SECONDARY` | `threshold` | A second range on the same episodes, from the first close `DRAWDOWN_THRESHOLD` below the high ("once it's down 25%, how long until it's back?"); `""` hides it |
 | `TURNAROUND_STRUCTURAL_ACTION` | `withhold` | Devil's Advocate says "structural": withhold the range (`downgrade` → show it at Low confidence, "may not be mean-reverting") |
 | `TURNAROUND_CONFIDENCE_LEVELS` / `TURNAROUND_HIGH_MIN_EPISODES` / `TURNAROUND_CONFIDENCE_RULE` | Low, Medium, High / 6 / text | ≥ 6 recovered episodes → High, ≥ `MIN_EPISODES` → Medium, else Low; −1 level for the all-types fallback, −1 for peer-based; structural flag per `TURNAROUND_STRUCTURAL_ACTION`. The rule text is printed with every estimate |
 | `TURNAROUND_SURVIVORSHIP_CAVEAT` | the caveat in "Turnaround estimate integrity" | Always shown |
 | `RATIO_COMPARE_TOLERANCE` | 1e-9 | Float slack so a value exactly at a ratio threshold (e.g. `MARKET_DRIVEN_RATIO`) counts as meeting it |
 | `DAYS_PER_MONTH` | 30.4375 | Unit constant for recovery months |
 | `MACD_FAST` / `MACD_SLOW` / `MACD_SIGNAL` / `MACD_CROSSOVER_LOOKBACK_DAYS` | 12 / 26 / 9 / 5 | Bullish MACD crossover within the last 5 trading days (turnaround near-term signal) |
-| `WILLIAMS_R_PERIOD` / `WILLIAMS_R_OVERSOLD` / `WILLIAMS_R_LOOKBACK_DAYS` | 14 / −80 / 5 | Williams %R (close-based: only closes are available) rising out of oversold: ≤ −80 within the last 5 days, above it now |
+| `WILLIAMS_R_PERIOD` / `WILLIAMS_R_OVERSOLD` / `WILLIAMS_R_LOOKBACK_DAYS` | 14 / −80 / 5 | Williams %R rising out of oversold: ≤ −80 within the last 5 days, above it now. Uses daily highs and lows scaled onto the adjusted closes; falls back to close-based (labelled) when a provider has no highs and lows |
 | `DOUBLE_BOTTOM_WINDOW_DAYS` / `_PIVOT_DAYS` / `_TOLERANCE` / `_MIN_SEPARATION_DAYS` / `_MIN_BOUNCE` | 120 / 5 / 3% / 20 / 10% | Forming double bottom: two pivot lows within 3% of each other, ≥ 20 trading days apart, a neckline ≥ 10% above them, price now between the second low and the neckline |
 | `VALUATION_RECOVERY_YEARS` | 5 | Valuation-based recovery: time for a ratio to return to its own 5-year median (needs FMP) |
 | `LEADERSHIP_LOOKBACK_MONTHS` | 24 | Window for CEO/CFO departure flag |
@@ -214,7 +215,7 @@ Computed in `/signals`, deterministic, following Rules 2, 2b and 3b (N/A vs n/m,
   - Shown in the screener table and used for sorting. It becomes a screen metric only if `USE_EARNINGS_YIELD_IN_SCREEN` (default False) is on, with `MIN_EARNINGS_YIELD` (0.08); then raise `MIN_METRICS_FOR_PASS` to 4 of 5.
 - **Peak-earnings check (cyclicals).** For tickers whose cyclicality score is 3 (sector or industry override): if TTM operating margin ≥ `PEAK_MARGIN_RATIO` (1.5) × the average operating margin of the available fiscal years, flag "possibly peak earnings". For flagged tickers the DCF base FCF is normalised to TTM revenue × the average FCF margin over the available years, and both the raw and normalised fair values are shown.
 
-**Insider activity.** Over `INSIDER_LOOKBACK_MONTHS` (6): number of distinct insiders buying and selling, net shares and value, and a **cluster-buy flag** when at least `INSIDER_CLUSTER_MIN` (3) distinct insiders made open-market purchases within `INSIDER_CLUSTER_DAYS` (90). 10b5-1 plan sales are counted separately from discretionary sales. Coverage is always shown, like the leadership flag.
+**Insider activity.** Trades are loaded over `INSIDER_FETCH_MONTHS` (12), so the turnaround can check the whole current drawdown for a cluster buy (its 52-week high is at most a year old). The summary below covers `INSIDER_LOOKBACK_MONTHS` (6): number of distinct insiders buying and selling, net shares and value, and a **cluster-buy flag** when at least `INSIDER_CLUSTER_MIN` (3) distinct insiders made open-market purchases within `INSIDER_CLUSTER_DAYS` (90). 10b5-1 plan sales are counted separately from discretionary sales. Coverage is always shown, like the leadership flag.
 
 **Dividend safety** (dividend payers only; non-payers → N/A "no dividend"):
 - Trailing dividend yield.

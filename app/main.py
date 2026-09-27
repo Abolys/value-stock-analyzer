@@ -38,6 +38,7 @@ from data.values import Datum  # noqa: E402
 from app import screen_jobs  # noqa: E402
 from analysis.models import LENS_LABELS, LENSES, AggregateResult, LensResult, QuantResult  # noqa: E402
 from analysis.pipeline import run_analysis  # noqa: E402
+from analysis.turnaround import clock_label  # noqa: E402
 from analysis.turnaround_models import STATUS_WITHHELD, TurnaroundResult  # noqa: E402
 from llm.client import LLMClient  # noqa: E402
 from storage import llm_store  # noqa: E402
@@ -123,6 +124,8 @@ def _pct_drop(v: float | None) -> str:
 
 def show_turnaround(t: TurnaroundResult) -> None:
     st.markdown(f"#### Turnaround outlook: {t.headline or t.status}")
+    if t.secondary_line:
+        st.markdown(f"{t.secondary_line} _(same episodes, a different start for the clock)_")
     if t.confidence:
         st.markdown(f"**Confidence: {t.confidence}** — " + "; ".join(t.confidence_reasons))
     elif t.status == STATUS_WITHHELD:
@@ -161,8 +164,9 @@ def show_turnaround(t: TurnaroundResult) -> None:
         st.markdown(f"Episodes: {len(t.episodes)} ({t.recovered_count} recovered, {t.unrecovered_count} unrecovered)")
         st.dataframe(pd.DataFrame([{
             "peak": e.peak_date, "trough": e.trough_date, "recovered": e.recovery_date or "—",
-            "drop": f"{-e.drop:.0%}", f"months ({config.RECOVERY_CLOCK_START} → recovery)":
-                round(e.recovery_months, 1) if e.recovery_months is not None else None,
+            "drop": f"{-e.drop:.0%}",
+            **{f"months {clock_label(c)}": round(e.months_from[c], 1) if c in e.months_from else None
+               for c in (t.clock, t.secondary_clock) if c},
             "type": e.episode_type, "benchmark": f"{e.benchmark} {_pct_drop(e.benchmark_drop)}",
             "status": "recovered" if e.recovered else f"unrecovered: {e.unrecovered_reason}",
         } for e in t.episodes]), hide_index=True, width="stretch")

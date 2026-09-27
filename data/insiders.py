@@ -26,6 +26,7 @@ MANUAL_COLUMNS = ["ticker", "date", "insider", "role", "type", "shares", "price"
 
 class InsiderData(BaseModel):
     ticker: str
+    since: date | None = None  # the date transactions were loaded from
     transactions: list[InsiderTransaction] = Field(default_factory=list)
     coverage: list[str] = Field(default_factory=list)
     ignored_codes: dict[str, int] = Field(default_factory=dict)
@@ -63,7 +64,7 @@ def load_manual_insider_events(ticker: str, path: Path = config.INSIDER_EVENTS_C
 
 def collect_insider_data(ticker: str, edgar: EdgarClient | None, since: date,
                          manual_path: Path = config.INSIDER_EVENTS_CSV) -> InsiderData:
-    data = InsiderData(ticker=ticker)
+    data = InsiderData(ticker=ticker, since=since)
     if edgar is not None:
         try:
             cik = edgar.lookup_cik(ticker)

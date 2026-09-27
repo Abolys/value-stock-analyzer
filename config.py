@@ -281,6 +281,9 @@ LISTING_COUNTRY_DEFAULT = "US"
 # Recovery time runs from this point of each episode to the recovery date:
 # "trough" | "threshold" (first close DRAWDOWN_THRESHOLD below the high) | "peak".
 RECOVERY_CLOCK_START = "trough"
+# A second range on the same episodes, shown beside the main one ("" to hide it). From the
+# threshold it answers "once it's down 25%, how long until it's back?".
+RECOVERY_CLOCK_SECONDARY = "threshold"
 # Devil's Advocate impairment_type == "structural": "withhold" the range, or
 # "downgrade" it to Low confidence labelled "may not be mean-reverting".
 TURNAROUND_STRUCTURAL_ACTION = "withhold"
@@ -442,6 +445,10 @@ PEAK_MARGIN_RATIO = 1.5
 INSIDER_LOOKBACK_MONTHS = 6
 INSIDER_CLUSTER_MIN = 3
 INSIDER_CLUSTER_DAYS = 90
+# Insider trades are loaded this far back so the turnaround can check the whole current
+# drawdown (its 52-week high is at most ROLLING_HIGH_DAYS old); the activity summary and
+# the Devil's Advocate payload still cover INSIDER_LOOKBACK_MONTHS only.
+INSIDER_FETCH_MONTHS = 12
 DIVIDEND_FCF_PAYOUT_MAX = 1.0
 DIVIDEND_CUT_THRESHOLD = 0.10
 # Financials and REITs: FCF is not meaningful (Rule 5), so dividend safety uses the earnings

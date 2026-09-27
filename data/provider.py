@@ -124,6 +124,12 @@ class DataProvider(ABC):
         """Daily closes indexed by date. adjusted=True → dividend- and split-adjusted
         closes; adjusted=False → actual traded closes (Rule 5)."""
 
+    def get_price_range(self, ticker: str) -> pd.DataFrame:
+        """Daily highs and lows, dividend- and split-adjusted like `adjusted=True` closes
+        (columns "high", "low"). Optional: providers without it raise ProviderUnavailable
+        and callers fall back to close-based indicators."""
+        raise ProviderUnavailable(f"{self.name} has no daily highs and lows")
+
     @abstractmethod
     def get_splits(self, ticker: str) -> pd.Series:
         """Split ratios (new shares per old share; 0.1 = 1-for-10 reverse) indexed by date."""

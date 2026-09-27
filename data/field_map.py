@@ -155,6 +155,8 @@ YF_STATEMENT_ATTRS = {
 # Column names in yfinance price frames and calendar dicts.
 YF_PRICE_CLOSE = "Close"
 YF_PRICE_ADJ_CLOSE = "Adj Close"
+YF_PRICE_HIGH = "High"
+YF_PRICE_LOW = "Low"
 YF_CALENDAR_EARNINGS_DATE = ("Earnings Date",)
 YF_SPLITS_NAME = "Stock Splits"
 
