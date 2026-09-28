@@ -131,6 +131,7 @@ class PeerSelection(BaseModel):
     not_screened: int = 0  # universe tickers without one (industry unknown)
     screen_run_id: int | None = None
     screen_run_date: date | None = None
+    screen_run_partial: bool = False  # peers read from a run that hasn't completed (fewer candidates)
     universe_lists: list[str] = Field(default_factory=list)
     source_note: str = ""
 

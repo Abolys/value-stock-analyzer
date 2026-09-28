@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-NO_SCREEN_RUN = "Unavailable - no completed screen run (peers' industry and market cap unknown)"
+NO_SCREEN_RUN = "Unavailable - no screen run with results yet (peers' industry and market cap unknown)"
 VALUATION_FMP_TODO = "Unavailable — FMP is configured but its historical ratios are not implemented yet"
 
 
@@ -362,12 +362,26 @@ def all_universe_keys() -> list[str]:
     return list(config.UNIVERSE_SOURCES) + list(config.MANUAL_UNIVERSE_LISTS)
 
 
+def peer_source_run(db_path: Path | str = config.RUNS_DB_PATH) -> tuple[screen_store.ScreenRun | None, int]:
+    """The screen run peers are read from, and how many results it holds: the latest completed run,
+    otherwise the latest run with any results (running, stopped or interrupted), so a first screen
+    that hasn't finished still gives peers. A partial run is labelled as such wherever it is used."""
+    run = screen_store.latest_completed_run(db_path)
+    if run is not None:
+        return run, screen_store.count_results(run.run_id, db_path).done
+    for r in screen_store.list_runs(db_path, limit=1000):
+        done = screen_store.count_results(r.run_id, db_path).done
+        if done:
+            return r, done
+    return None, 0
+
+
 def select_peers(ticker: str, industry: str | None, market_cap: float | None,
                  db_path: Path | str = config.RUNS_DB_PATH, universe_keys: list[str] | None = None,
                  universe_dir: Path = config.UNIVERSE_DIR, n: int = config.PEER_COUNT) -> PeerSelection:
     """Same yfinance industry, nearest `n` by market cap (log distance), from the combined
-    universe lists. Industry and market cap come from the latest completed screen run,
-    the only place the app has them for every universe ticker."""
+    universe lists. Industry and market cap come from a screen run (`peer_source_run`: the latest
+    completed one, else the latest partial one), the only place the app has them for universe tickers."""
     keys = universe_keys or all_universe_keys()
     labels = list_labels()
     sel = PeerSelection(ticker=ticker, industry=industry, market_cap=market_cap,
@@ -382,12 +396,15 @@ def select_peers(ticker: str, industry: str | None, market_cap: float | None,
     if uni.empty:
         sel.status = "Unavailable - the universe lists are empty"
         return sel
-    run = screen_store.latest_completed_run(db_path)
+    run, done = peer_source_run(db_path)
     if run is None:
         sel.status = NO_SCREEN_RUN
         return sel
     results = {r.ticker: r for r in screen_store.load_results(run.run_id, db_path)}
     sel.screen_run_id, sel.screen_run_date = run.run_id, run.started_at.date()
+    sel.screen_run_partial = run.status != screen_store.COMPLETED
+    run_label = (f"partial screen run {run.run_id} ({run.status}; {done} of {run.total} tickers screened)"
+                 if sel.screen_run_partial else f"screen run {run.run_id}")
     cands: list[Peer] = []
     for _, row in uni.iterrows():
         t = row["ticker"]
@@ -405,10 +422,10 @@ def select_peers(ticker: str, industry: str | None, market_cap: float | None,
     sel.peers = cands[:n]
     sel.source_note = (f"Peers come from the universe lists ({', '.join(sel.universe_lists)}), the app's only source "
                        f"of companies: same industry ({industry}), nearest {n} by market cap. Industry and market cap "
-                       f"from screen run {run.run_id} ({sel.screen_run_date}); {sel.not_screened} universe tickers "
+                       f"from {run_label} ({sel.screen_run_date}); {sel.not_screened} universe tickers "
                        f"not in that run were not considered.")
     if not sel.peers:
-        sel.status = f"Unavailable - no universe ticker in industry {industry!r} with a market cap in screen run {run.run_id}"
+        sel.status = f"Unavailable - no universe ticker in industry {industry!r} with a market cap in {run_label}"
     return sel
 
 

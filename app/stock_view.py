@@ -130,7 +130,9 @@ def load_bundle(provider: DataProvider, run: AnalysisRun, db_path=None) -> Price
         wanted = {p.ticker for p in sel.peers}
         b.peers = [r for r in screen_store.load_results(sel.screen_run_id, db_path) if r.ticker in wanted]
         b.peer_note = (f"{len(b.peers)} peers from your universe lists (same industry, nearest market cap; "
-                       f"screen run {sel.screen_run_id}, {sel.screen_run_date})")
+                       f"{'partial ' if sel.screen_run_partial else ''}screen run {sel.screen_run_id}, "
+                       f"{sel.screen_run_date}"
+                       f"{'; not finished, so some peers may be missing' if sel.screen_run_partial else ''})")
     else:
         b.peer_note = sel.status if sel.status != "ok" else "no peers found in the universe lists"
     return b

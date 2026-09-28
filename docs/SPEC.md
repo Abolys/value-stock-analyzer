@@ -30,7 +30,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `MIN_EPISODES` | 3 | Below this, fall back to peers; also the minimum same-type episodes before falling back to all types |
 | `BENCHMARKS` | US → `SPY`, Canada → `^GSPTSE` | Market benchmark per listing country (verify the TSX symbol in yfinance) |
 | `MARKET_DRIVEN_RATIO` | 0.5 | An episode is "market-driven" if the benchmark fell by ≥ 50% of the stock's drop over the same window |
-| `PEER_COUNT` | 5 | Peers = same yfinance industry, nearest 5 by market cap, chosen from the combined universe lists (the app has no other source of companies); the output lists the peers used and says they come from the universe |
+| `PEER_COUNT` | 5 | Peers = same yfinance industry, nearest 5 by market cap, chosen from the combined universe lists (the app has no other source of companies); the output lists the peers used and says they come from the universe. Industry and market cap come from the latest completed screen run, else the latest run with results (a first screen still running or stopped), labelled "partial" |
 | `ROLLING_HIGH_DAYS` | 252 | Trading days in the rolling 52-week high (computed within one corporate-action segment only) |
 | `LISTING_COUNTRY_SUFFIXES` / `LISTING_COUNTRY_DEFAULT` | `.TO`, `.V`, `.NE`, `.CN` → CA / US | Listing country from the ticker suffix; picks the `BENCHMARKS` index |
 | `RECOVERY_CLOCK_START` | `trough` | Recovery time runs from the episode's trough (alternatives: `threshold`, `peak`) to the first close back within `RECOVERY_BAND` of the prior high |

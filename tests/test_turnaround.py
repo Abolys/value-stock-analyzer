@@ -303,6 +303,27 @@ def test_select_peers_without_a_screen_run_is_unavailable(tmp_path):
     assert sel.status == NO_SCREEN_RUN and not sel.ok
 
 
+def test_select_peers_uses_a_partial_run_when_none_completed(tmp_path):
+    _, uni = _peer_world(tmp_path)
+    db = tmp_path / "partial.db"
+    run_id = screen_store.create_run(["watchlist"], status=screen_store.RUNNING, path=db)
+    screen_store.update_run(run_id, path=db, total=9)
+    for t in ("P1", "P2"):  # the run has screened only two tickers so far
+        screen_store.write_result(run_id, ScreenResult(ticker=t, industry="Widgets", market_cap=Datum(value=PEER_CAPS[t])),
+                                  db)
+    sel = select_peers("TEST", "Widgets", 1e9, db, ["watchlist"], uni)
+    assert sel.ok and {p.ticker for p in sel.peers} == {"P1", "P2"}
+    assert sel.screen_run_partial and "partial screen run" in sel.source_note and "2 of 9 tickers" in sel.source_note
+
+
+def test_select_peers_prefers_the_completed_run_over_a_newer_partial_one(tmp_path):
+    db, uni = _peer_world(tmp_path)
+    newer = screen_store.create_run(["watchlist"], status=screen_store.RUNNING, path=db)
+    screen_store.write_result(newer, ScreenResult(ticker="P1", industry="Widgets", market_cap=Datum(value=1e9)), db)
+    sel = select_peers("TEST", "Widgets", 1e9, db, ["watchlist"], uni)
+    assert sel.screen_run_id != newer and not sel.screen_run_partial and len(sel.peers) == 5
+
+
 def test_peer_fallback_below_min_episodes(tmp_path):
     db, uni = _peer_world(tmp_path)
     stock, _ = build(drop_and_recover(60) + [(40, 70.0, 100.0)])  # one recovered episode of its own
