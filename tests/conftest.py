@@ -58,6 +58,22 @@ def _no_background_checks(monkeypatch):
     return launched
 
 
+@pytest.fixture
+def _no_background_screens(monkeypatch):
+    """The app starts screen runs as background processes; tests that click "Run screen now"
+    record the launch instead (opt-in: tests/test_screener_page.py exercises the real launcher)."""
+    from app import screen_jobs
+
+    launched: list = []
+
+    def fake_launch(lists=None, resume=False, db_path=None):
+        launched.append((lists, resume))
+        return Path("screen.log")
+
+    monkeypatch.setattr(screen_jobs, "launch", fake_launch)
+    return launched
+
+
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch, request):
     if request.node.get_closest_marker("live"):

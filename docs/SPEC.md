@@ -83,6 +83,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `ASSET_COVERAGE_BANDS` | ≥100% fully covered, 50–100% partly, 20–50% thin, <20% negligible | Asset coverage band |
 | `MONTHS_PER_YEAR` / `QUARTERS_PER_YEAR` | 12 / 4 | Unit constants for monthly runway burn and quarterly net-net burn |
 | `SCREEN_PROGRESS_POLL_SECONDS` | 5 | Screener page progress refresh |
+| `SCREEN_REMIND_DAYS` | 7 | On app start, ask whether to run a new screen when the last completed one is older than this (or none has completed); offers Resume instead when the latest run was interrupted, and stays quiet while one is running |
 | `SCREEN_ETA_MIN_DONE` | 5 | Tickers finished before the Screener shows an estimated time left |
 | `CHANGES_LIST_MAX` | 8 | Tickers named per "Changes since last screen" card before "+n more" |
 | `HEATMAP_NEUTRAL_BAND` | 0.05 | Sensitivity heatmap: fair values within ±5% of the actual latest price are shaded neutral grey |

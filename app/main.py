@@ -17,7 +17,8 @@ if str(ROOT) not in sys.path:
 import streamlit as st  # noqa: E402
 
 import config  # noqa: E402
-from app import alert_jobs, services, ui  # noqa: E402
+from app import alert_jobs, screen_jobs, services, ui  # noqa: E402
+from app import screener_view  # noqa: E402
 from app.views import accuracy, portfolio, screener, stock  # noqa: E402
 from portfolio import store as pf_store  # noqa: E402
 from storage import llm_store  # noqa: E402
@@ -58,6 +59,47 @@ def sidebar(report) -> None:
         st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
 
 
+def _close_reminder() -> None:
+    st.session_state.pop("screen_reminder", None)
+
+
+@st.dialog("Screen out of date", on_dismiss=_close_reminder)
+def screen_reminder(prompt: screen_jobs.ScreenPrompt) -> None:
+    st.write(prompt.message)
+    rows = {r["key"]: r for r in screener_view.list_picker_rows()}
+    lists = [k for k in prompt.lists if k in rows] or [k for k, r in rows.items() if r["count"]]
+    if prompt.kind == "run":
+        st.caption("Lists: " + ", ".join(f"{rows[k]['label']} ({rows[k]['count']:,})" for k in lists)
+                   + ". Choose different lists on the Screener page.")
+    c1, c2 = st.columns(2)
+    label = "Resume screen" if prompt.kind == "resume" else "Run screen now"
+    if c1.button(label, type="primary", key="remind-run", disabled=prompt.kind == "run" and not lists):
+        try:
+            if prompt.kind == "resume":
+                screen_jobs.launch(resume=True, db_path=config.RUNS_DB_PATH)
+            else:
+                screen_jobs.launch(lists, db_path=config.RUNS_DB_PATH)
+            st.session_state["screen_reminder_note"] = "Screen started in the background; progress is on the Screener page."
+        except RuntimeError as exc:
+            st.session_state["screen_reminder_note"] = f"Screen not started: {exc}"
+        _close_reminder()
+        st.rerun()
+    if c2.button("Not now", key="remind-skip"):
+        _close_reminder()
+        st.rerun()
+
+
+def remind_screen() -> None:
+    """Once per session: ask to run a screen when the last completed one is older than SCREEN_REMIND_DAYS."""
+    if not st.session_state.get("screen_reminder_checked"):
+        st.session_state["screen_reminder_checked"] = True
+        prompt = screen_jobs.screen_prompt(config.RUNS_DB_PATH)
+        if prompt is not None:
+            st.session_state["screen_reminder"] = prompt  # kept until answered or dismissed
+    if st.session_state.get("screen_reminder") is not None:
+        screen_reminder(st.session_state["screen_reminder"])
+
+
 def start_alert_check() -> None:
     """Once per session: launch the background alert check when one is due (never blocks the page)."""
     if st.session_state.get("alert_check_started"):
@@ -79,11 +121,14 @@ def main() -> None:
         "accuracy": st.Page(lambda: accuracy.render(provider), title="Estimate accuracy", url_path="accuracy"),
     })
     start_alert_check()
+    remind_screen()
     page = st.navigation(list(ui.PAGES.values()))
     sidebar(report)
     if st.session_state.pop("goto_stock", False) and page.url_path != "stock":
         st.switch_page(ui.PAGES["stock"])
     ui.banner(report)
+    if st.session_state.get("screen_reminder_note"):
+        st.info(st.session_state.pop("screen_reminder_note"))
     if st.session_state.get("alert_check_error"):
         st.warning(st.session_state["alert_check_error"])
     page.run()
