@@ -109,6 +109,20 @@ def latest_completed_run(path: Path | str = config.RUNS_DB_PATH) -> ScreenRun | 
     return latest_run(path, (COMPLETED,))
 
 
+def results_run(path: Path | str = config.RUNS_DB_PATH) -> tuple[ScreenRun | None, int]:
+    """The run whose results the app shows, and how many results it holds: the latest completed run,
+    otherwise the latest run with any results (still running, stopped or interrupted). Callers label
+    a run that isn't completed as partial."""
+    run = latest_completed_run(path)
+    if run is not None:
+        return run, count_results(run.run_id, path).done
+    for r in list_runs(path, limit=1000):
+        done = count_results(r.run_id, path).done
+        if done:
+            return r, done
+    return None, 0
+
+
 def latest_resumable_run(path: Path | str = config.RUNS_DB_PATH) -> ScreenRun | None:
     return latest_run(path, RESUMABLE)
 

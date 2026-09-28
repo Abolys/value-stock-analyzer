@@ -10,7 +10,7 @@ import config
 from app import charts
 from app import screener_view as sv
 from data.values import Datum
-from screening.models import FAIL, NM, SLOT_LEVERAGE, SLOT_MOS, STATUS_FAIL, STATUS_INCOMPLETE, STATUS_PASS
+from screening.models import STATUS_FAILED_TO_LOAD, FAIL, NM, SLOT_LEVERAGE, SLOT_MOS, STATUS_FAIL, STATUS_INCOMPLETE, STATUS_PASS
 from storage import screen_store as store
 from tests.screen_helpers import run_eval
 
@@ -90,8 +90,29 @@ def test_scatter_exclusion_caption():
     pts, excluded = sv.scatter_points(rs)
     out = charts.screener_scatter(pts, excluded)
     assert [p.ticker for p in pts] == ["OK"]
-    assert "NEG: margin of safety n/m - negative EPS" in out.caption
+    assert "1 margin of safety n/m - negative EPS: NEG" in out.caption
     assert any(s.type == "line" and s.x0 == 0 for s in out.fig.layout.shapes)  # line at zero margin of safety
+
+
+def test_scatter_caption_groups_hundreds_of_stage1_cuts():
+    import config
+
+    rs = [result("OK")]
+    for i in range(40):
+        r = result(f"C{i:02d}", STATUS_FAIL)
+        r.quality, r.decided_at_stage = None, 1
+        rs.append(r)
+    bad = result("GONE")
+    bad.status = STATUS_FAILED_TO_LOAD
+    rs.append(bad)
+    pts, excluded = sv.scatter_points(rs)
+    assert len(excluded) == 41  # every ticker still listed (the page shows them in full)
+    assert "C00: cut at stage 1 (statements not fetched, so no quality score)" in excluded
+    out = charts.screener_scatter(pts, excluded)
+    assert out.excluded[0].startswith("40 cut at stage 1 (statements not fetched, so no quality score): C00, C01")
+    assert out.excluded[0].endswith(f"+{40 - config.CHANGES_LIST_MAX} more")
+    assert "1 failed to load: GONE" in out.caption
+    assert "C39" not in out.caption
 
 
 def test_changes_panel_on_two_saved_runs(db_path):

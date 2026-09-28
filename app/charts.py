@@ -472,8 +472,10 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
 # --------------------------------------------------------------------------
 # Dividend panel (payers only)
 # --------------------------------------------------------------------------
-def dividend_panel(div: DividendSafety | None) -> tuple[ChartOut, ChartOut] | None:
-    """(per-share bars, FCF payout line) for payers; None for non-payers (the panel is hidden)."""
+def dividend_panel(div: DividendSafety | None) -> tuple[ChartOut, ChartOut | None] | None:
+    """(per-share bars, payout line) for payers; None for non-payers (the panel is hidden). The payout
+    line is dividends ÷ FCF, or ÷ net income for financials and REITs (FCF is not meaningful for them);
+    with no year to plot it is left off and the reasons go in the bars' caption."""
     if div is None or not div.payer:
         return None
     cut_years = {c.year for c in div.cuts}
@@ -484,18 +486,26 @@ def dividend_panel(div: DividendSafety | None) -> tuple[ChartOut, ChartOut] | No
         hovertemplate="%{x}: %{y:,.4f} per share<extra></extra>"))
     _base(bars, 200, showlegend=False, yaxis_title="Dividend per share")
     bar_notes = [f"Calendar-year totals (split-adjusted); red = cut of more than {config.DIVIDEND_CUT_THRESHOLD:.0%}"]
-    ok = {k: d for k, d in div.fcf_payout_history.items() if d.ok}
-    excluded = [f"{k}: {d.status}" for k, d in div.fcf_payout_history.items() if not d.ok]
+    if div.payout_basis == "earnings":
+        history, name, cap = div.earnings_payout_history, "Earnings payout", config.DIVIDEND_EARNINGS_PAYOUT_MAX_FINANCIALS
+        note = "Dividends paid ÷ net income per fiscal year (financials and REITs: FCF is not meaningful)"
+    else:
+        history, name, cap = div.fcf_payout_history, "FCF payout", config.DIVIDEND_FCF_PAYOUT_MAX
+        note = "Dividends paid ÷ raw FCF per fiscal year"
+    ok = {k: d for k, d in history.items() if d.ok}
+    excluded = [f"{k}: {d.status}" for k, d in history.items() if not d.ok]
+    bars_out = ChartOut(fig=bars, title="Dividend per share", notes=bar_notes)
+    if not ok:  # nothing to plot: never draw an empty frame
+        bars_out.excluded.append(f"{name} chart: no fiscal year with a value"
+                                 + (f" ({'; '.join(excluded)})" if excluded else " (dividends paid not reported)"))
+        return bars_out, None
     line = go.Figure(go.Scatter(x=list(ok), y=[d.value for d in ok.values()], mode="lines+markers",
                                 line=dict(color=theme.PRIMARY, width=2), marker=dict(size=8),
-                                hovertemplate="%{x}: %{y:.0%}<extra>FCF payout</extra>"))
-    line.add_hline(y=config.DIVIDEND_FCF_PAYOUT_MAX, line=dict(color=theme.CRITICAL, dash="dash", width=1),
-                   annotation_text=f"{config.DIVIDEND_FCF_PAYOUT_MAX:.0%}")
-    _base(line, 170, showlegend=False, yaxis_title="FCF payout")
+                                hovertemplate=f"%{{x}}: %{{y:.0%}}<extra>{name}</extra>"))
+    line.add_hline(y=cap, line=dict(color=theme.CRITICAL, dash="dash", width=1), annotation_text=f"{cap:.0%}")
+    _base(line, 170, showlegend=False, yaxis_title=name)
     line.update_yaxes(tickformat=".0%")
-    return (ChartOut(fig=bars, title="Dividend per share", notes=bar_notes),
-            ChartOut(fig=line, title="FCF payout by fiscal year", excluded=excluded,
-                     notes=["Dividends paid ÷ raw FCF per fiscal year"]))
+    return bars_out, ChartOut(fig=line, title=f"{name} by fiscal year", excluded=excluded, notes=[note])
 
 
 # --------------------------------------------------------------------------
@@ -592,6 +602,20 @@ class ScatterPoint(BaseModel):
     label: bool = False
 
 
+def group_excluded(excluded: list[str], limit: int = config.CHANGES_LIST_MAX) -> list[str]:
+    """"TICKER: reason" items grouped by reason, each with up to `limit` tickers and "+n more", so a
+    caption stays readable when hundreds are left off (the page lists every one in full)."""
+    groups: dict[str, list[str]] = {}
+    for item in excluded:
+        ticker, _, reason = item.partition(": ")
+        groups.setdefault(reason or "no reason recorded", []).append(ticker)
+    out = []
+    for reason, tickers in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        names = ", ".join(tickers[:limit]) + (f" +{len(tickers) - limit} more" if len(tickers) > limit else "")
+        out.append(f"{len(tickers)} {reason}: {names}")
+    return out
+
+
 def screener_scatter(points: list[ScatterPoint], excluded: list[str]) -> ChartOut:
     fig = go.Figure()
     if points:
@@ -610,7 +634,7 @@ def screener_scatter(points: list[ScatterPoint], excluded: list[str]) -> ChartOu
     fig.update_yaxes(range=[0, 10.5])
     notes = [f"{len(points)} tickers; labels on the top {config.SCATTER_LABEL_TOP_N} by quality rank + margin-of-safety "
              "rank; click a point to open it"]
-    return ChartOut(fig=fig, title="Margin of safety vs quality", excluded=excluded, notes=notes)
+    return ChartOut(fig=fig, title="Margin of safety vs quality", excluded=group_excluded(excluded), notes=notes)
 
 
 # --------------------------------------------------------------------------

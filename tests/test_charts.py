@@ -126,6 +126,33 @@ def test_dividend_panel_highlights_cuts_and_lists_nm_payout_years():
     assert "yaxis2" not in payout.fig.layout  # the payout line is its own chart, never a second axis
 
 
+def test_dividend_payout_for_financials_uses_earnings():
+    div = DividendSafety(annual_per_share={2024: 4.0, 2025: 4.6}, payout_basis="earnings",
+                         fcf_payout_history={"FY ending Dec 2025": Datum.missing("n/m - FCF not meaningful")},
+                         earnings_payout_history={"FY ending Dec 2024": d(0.28), "FY ending Dec 2025": d(0.26)})
+    _, payout = charts.dividend_panel(div)
+    assert payout.title == "Earnings payout by fiscal year" and payout.fig.data[0].y == (0.28, 0.26)
+    assert payout.fig.layout.shapes[0].y0 == config.DIVIDEND_EARNINGS_PAYOUT_MAX_FINANCIALS
+
+
+def test_dividend_payout_chart_left_off_when_no_year_has_a_value():
+    div = DividendSafety(annual_per_share={2024: 1.0},
+                         fcf_payout_history={"FY ending Dec 2025": Datum.missing("n/m - FCF ≤ 0")})
+    bars, payout = charts.dividend_panel(div)
+    assert payout is None  # never an empty frame
+    assert any("FCF payout chart: no fiscal year with a value" in e and "n/m - FCF ≤ 0" in e for e in bars.excluded)
+
+
+def test_jpm_dividend_payout_is_plotted_on_earnings(fx_provider, db_path):
+    from analysis.pipeline import view_run
+    from tests.analysis_helpers import fixture_inputs
+
+    run = view_run(fixture_inputs(fx_provider, "JPM", db_path))
+    assert run.dividends.payout_basis == "earnings"
+    _, payout = charts.dividend_panel(run.dividends)
+    assert payout is not None and len(payout.fig.data[0].y) >= 2 and all(0 < v < 1 for v in payout.fig.data[0].y)
+
+
 def test_week52_bar_places_marker_and_labels_drawdown():
     w = Week52(low=50.0, high=100.0, latest=62.5, low_date=date(2026, 3, 1), high_date=date(2025, 11, 1),
                as_of=date(2026, 9, 25), drawdown=0.375)

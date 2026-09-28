@@ -157,3 +157,41 @@ def test_da_result_fields(tmp_path):
     assert r.ok and r.impairment_type == "cyclical" and r.score == 5.0
     assert r.bull_case_requirements and r.weakest_valuation_assumption and r.leadership_turnover
     assert "Leadership turnover" in r.rationale
+
+
+def _da(x, llm):
+    return devils_advocate_lens(x, *lenses(x), llm)
+
+
+def test_da_cache_survives_a_small_price_move_but_not_a_material_one(tmp_path):
+    """The DA payload quotes the price; a new trading day's small move must not force a re-score."""
+    api = FakeAPI()
+    llm = LLMClient(api=api, cache=LLMCache(tmp_path / "c.db"), db_path=tmp_path / "r.db")
+    first = _da(make_inputs(px=10.0), llm)
+    assert not first.cache_hit and len(api.requests) == 1
+    small = _da(make_inputs(px=10.2), llm)  # +2%: same 5% band, every price-based value moved
+    assert small.cache_hit and len(api.requests) == 1
+    assert small.payload["price"] != first.payload["price"]  # the model would still see the exact price
+    assert any("cached answer reused" in n for n in small.notes)
+    big = _da(make_inputs(px=13.0), llm)  # +30%: a different band → a fresh call
+    assert not big.cache_hit and len(api.requests) == 2
+
+
+def test_da_cache_key_still_changes_with_fundamentals(tmp_path):
+    api = FakeAPI()
+    llm = LLMClient(api=api, cache=LLMCache(tmp_path / "c.db"), db_path=tmp_path / "r.db")
+    _da(make_inputs(), llm)
+    worse = make_inputs(f=make_fundamentals({"total_debt": (900, 350), "long_term_debt": (850, 300)}))
+    assert not _da(worse, llm).cache_hit and len(api.requests) == 2
+
+
+def test_cache_key_payload_drops_only_price_dependent_values():
+    from analysis.devils_advocate import PRICE_DEPENDENT, cache_key_payload
+
+    x = make_inputs()
+    payload = build_da_payload(x, *lenses(x))
+    key = cache_key_payload(payload, x.price)
+    assert not set(PRICE_DEPENDENT) & set(key) and "price_band" in key
+    assert "quant" not in key["lenses"] and "macro" in key["lenses"]
+    assert key["piotroski"] == payload["piotroski"] and key["net_debt_ebitda"] == payload["net_debt_ebitda"]
+    assert "price" in payload  # the payload itself is unchanged

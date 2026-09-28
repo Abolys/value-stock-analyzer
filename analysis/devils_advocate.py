@@ -11,6 +11,9 @@ markers. The score is how well the bull case survives the attack (DA_RUBRIC).
 
 from __future__ import annotations
 
+import copy
+import math
+import re
 from typing import Any
 
 import config
@@ -224,6 +227,40 @@ def build_da_payload(x: AnalysisInputs, quant: QuantResult | None, macro: MacroR
     return payload
 
 
+# Payload fields that move with the price every trading day. The response cache is keyed on the
+# payload with these replaced by a price band (DA_CACHE_PRICE_BAND), so a re-analysis after a small
+# price move reuses the cached answer instead of re-scoring; a material move (or any change in the
+# fundamentals, signals or other lenses) still changes the key.
+PRICE_DEPENDENT = ("price", "dcf_implied_upside", "implied_growth", "graham_number", "ev_ebit_yield")
+PRICE_DEPENDENT_NESTED = {"asset_floor": ("coverage", "p_tbv", "ncav_to_mcap", "nnwc_to_mcap", "net_net_burn"),
+                          "dividend": ("trailing_yield",)}
+_PCT = re.compile(r"[+\-−]?\d[\d,.]*%")
+
+
+def price_band(price: Datum) -> str:
+    """The price's band on a log scale, DA_CACHE_PRICE_BAND wide (e.g. 5%)."""
+    if not price.ok or price.value <= 0:
+        return price.status if not price.ok else "n/m - price ≤ 0"
+    return str(math.floor(math.log(price.value) / math.log(1 + config.DA_CACHE_PRICE_BAND)))
+
+
+def cache_key_payload(payload: dict[str, Any], price: Datum) -> dict[str, Any]:
+    """The payload the response cache is keyed on: price-dependent values replaced by the price band."""
+    key = copy.deepcopy(payload)
+    for k in PRICE_DEPENDENT:
+        key.pop(k, None)
+    for k, fields in PRICE_DEPENDENT_NESTED.items():
+        if isinstance(key.get(k), dict):
+            for f in fields:
+                key[k].pop(f, None)
+    # The Quant line quotes the upside and its price-driven score; the valuation method and confidence stay.
+    key.get("lenses", {}).pop("quant", None)
+    if isinstance(key.get("quant_confidence"), str):
+        key["quant_confidence"] = _PCT.sub("#%", key["quant_confidence"])
+    key["price_band"] = price_band(price)
+    return key
+
+
 def da_problems(r: DevilsAdvocateResponse, payload: dict[str, Any]) -> list[str]:
     return evidence_problems(r.evidence, payload)
 
@@ -249,8 +286,13 @@ def devils_advocate_lens(x: AnalysisInputs, quant: QuantResult | None, macro: Ma
                                stale_label=x.screen.stale_label)
     out = llm.run(ticker=x.ticker, lens=LENS, prompt_version=version, system=prompts.DA_SYSTEM,
                   user=prompts.da_user(payload), schema=DevilsAdvocateResponse,
-                  cache_key=prompts.payload_json(payload), validate=lambda r: da_problems(r, payload))
+                  cache_key=prompts.payload_json(cache_key_payload(payload, x.price)),
+                  validate=lambda r: da_problems(r, payload))
     res.cache_hit, res.cost, res.list_price_cost = out.cache_hit, out.cost, out.list_price_cost
+    if out.cache_hit:
+        res.notes.append(f"cached answer reused: same fundamentals and signals, price within the same "
+                         f"{config.DA_CACHE_PRICE_BAND:.0%} band (DA_CACHE_PRICE_BAND); quoted price-based "
+                         "values may be from that earlier run")
     res.input_tokens, res.output_tokens = out.input_tokens, out.output_tokens
     res.assumptions = {"rubric": config.DA_RUBRIC, "prompt_version": version, "model": llm.model,
                        "backend": llm.backend,

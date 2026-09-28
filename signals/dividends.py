@@ -53,6 +53,9 @@ class DividendSafety(BaseModel):
     # FCF payout per fiscal year (dividends paid / raw FCF), keyed by the company's own FY label,
     # oldest first; each an n/m or N/A Datum with its reason when it can't be computed.
     fcf_payout_history: dict[str, Datum] = Field(default_factory=dict)
+    # Financials and REITs: dividends paid / net income per fiscal year instead (FCF is not meaningful).
+    earnings_payout_history: dict[str, Datum] = Field(default_factory=dict)
+    payout_basis: str = "fcf"  # "fcf" | "earnings" (financials and REITs)
 
     @property
     def payer(self) -> bool:
@@ -128,7 +131,22 @@ def dividend_safety(dividends: pd.Series | None, f: Fundamentals, price: Datum, 
     if totals:
         res.history_span = f"{min(totals)}–{max(totals)}"
     res.fcf_payout_history = fcf_payout_history(f, sector_adjusted)
+    if sector_adjusted:
+        res.payout_basis = "earnings"
+        res.earnings_payout_history = earnings_payout_history(f)
     return res
+
+
+def earnings_payout_history(f: Fundamentals) -> dict[str, Datum]:
+    """Dividends paid ÷ net income for each fiscal year, oldest first (financials and REITs)."""
+    out: dict[str, Datum] = {}
+    for fy in sorted(f.fiscal_year_ends()):
+        paid = f.fy("dividends_paid", fy)
+        paid_abs = paid.model_copy(update={"value": abs(paid.value)}) if paid.ok else paid
+        out[periods.fiscal_year_label(fy)] = safe_ratio(
+            paid_abs, f.fy("net_income", fy), name="earnings payout", nonpositive_reason="net income ≤ 0",
+            num_name="dividends paid", den_name="net income")
+    return out
 
 
 def fcf_payout_history(f: Fundamentals, sector_adjusted: bool = False) -> dict[str, Datum]:

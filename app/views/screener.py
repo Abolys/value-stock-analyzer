@@ -33,7 +33,7 @@ def run_header(shown: store.ScreenRun, latest: store.ScreenRun | None, results) 
         st.markdown(line, unsafe_allow_html=True)
         st.caption(f"{shown.refetched_reported:,} refetched after earnings · {shown.served_from_cache:,} from cache. "
                    "Failed to load is never counted as a Fail.")
-        if latest is not None and latest.run_id != shown.run_id:
+        if latest is not None and latest.run_id != shown.run_id and shown.status == store.COMPLETED:
             detail = "; ".join(latest.health_failures) or latest.note or ""
             st.warning(f"The newest run ({latest.run_id}, {latest.started_at:%b %d %H:%M}) is **{latest.status}**"
                        + (f": {detail}" if detail else "") + f". Showing the last completed screen ({shown.run_id}).")
@@ -146,6 +146,10 @@ def scatter(shown) -> None:
     pts, excluded = sv.scatter_points(shown)
     out = charts.screener_scatter(pts, excluded)
     event = ui.chart(out, key="screen-scatter", on_select="rerun", selection_mode="points")
+    if excluded:
+        with st.expander(f"Not on the scatter ({len(excluded)})"):
+            st.dataframe(pd.DataFrame([dict(zip(("ticker", "reason"), e.split(": ", 1))) for e in excluded]),
+                         hide_index=True, width="stretch")
     sel = event.selection.points if event and event.selection else []
     if sel:
         idx = sel[0].get("point_index", sel[0].get("point_number"))
@@ -159,17 +163,22 @@ def render(provider) -> None:
     completed = store.list_runs(db, limit=1000)
     completed = [r for r in completed if r.status == store.COMPLETED]
     list_picker(bool(completed))
-    if not completed:
+    run, done = store.results_run(db)
+    if run is None:
         latest = store.latest_run(db)
         if latest and latest.status == store.BLOCKED:
             st.error(f"Run {latest.run_id} was blocked: health check failed — " + "; ".join(latest.health_failures))
-        st.info("No completed screen run yet.")
+        st.info("No screen results yet.")
         return
-    run = completed[0]
     results = store.load_results(run.run_id, db)
+    partial = run.status != store.COMPLETED
+    if partial:
+        st.warning(f"No screen has completed yet. Showing the **partial** run {run.run_id} ({run.status}): "
+                   f"{done:,} of {run.total:,} tickers screened so far. Tickers not reached yet are missing; "
+                   "refresh the page to see more.")
     run_header(run, store.latest_run(db), results)
     changes = None
-    if len(completed) > 1:
+    if not partial and len(completed) > 1:
         prev = completed[1]
         changes = sv.screen_changes(store.load_results(prev.run_id, db), results, prev.lists, run.lists)
     changes_panel(changes)

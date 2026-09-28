@@ -366,14 +366,7 @@ def peer_source_run(db_path: Path | str = config.RUNS_DB_PATH) -> tuple[screen_s
     """The screen run peers are read from, and how many results it holds: the latest completed run,
     otherwise the latest run with any results (running, stopped or interrupted), so a first screen
     that hasn't finished still gives peers. A partial run is labelled as such wherever it is used."""
-    run = screen_store.latest_completed_run(db_path)
-    if run is not None:
-        return run, screen_store.count_results(run.run_id, db_path).done
-    for r in screen_store.list_runs(db_path, limit=1000):
-        done = screen_store.count_results(r.run_id, db_path).done
-        if done:
-            return r, done
-    return None, 0
+    return screen_store.results_run(db_path)
 
 
 def select_peers(ticker: str, industry: str | None, market_cap: float | None,

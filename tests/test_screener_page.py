@@ -44,6 +44,27 @@ def test_screener_page_shows_latest_completed_run(monkeypatch, tmp_path):
     assert at.get("plotly_chart")  # the scatter
 
 
+def test_screener_page_shows_a_partial_run_before_any_completes(monkeypatch, tmp_path):
+    db = config.RUNS_DB_PATH
+    run_id = store.create_run(["cowz"], total=100, pid=os.getpid(), path=db)  # still running
+    res = run_eval()
+    res.sources = "COWZ"
+    store.write_result(run_id, res, db)
+    store.update_run(run_id, db, attempted=1, passed_stage1=1, passed_stage2=1)
+    provider = CachedProvider(fixture_provider(), DiskCache(tmp_path / "c.db"))
+    monkeypatch.setattr(services, "build_provider", lambda: provider)
+    monkeypatch.setattr(services, "health", lambda p: HealthReport(ok=True, checked_at=datetime.now()))
+
+    at = AppTest.from_file("../app/main.py", default_timeout=60)
+    at.run()
+    assert not at.exception
+    warnings = " ".join(w.value for w in at.warning)
+    assert "**partial** run" in warnings and "1 of 100 tickers screened so far" in warnings
+    assert not any("No screen results yet" in i.value for i in at.info)
+    assert at.dataframe[0].value.iloc[0]["Ticker"] == "TEST"
+    assert "Needs two completed screens." in " ".join(c.value for c in at.caption)
+
+
 def test_launch_starts_script_in_background(monkeypatch, tmp_path):
     started = {}
     monkeypatch.setattr(config, "SCREEN_LOG_DIR", tmp_path / "logs")

@@ -101,6 +101,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `LLM_EFFORT` / `LLM_MAX_TOKENS` / `LLM_TIMEOUT_SECONDS` | "medium" / 16000 / 300 | LLM request settings |
 | `LLM_VALIDATION_RETRIES` | 1 | One retry (with the validation error fed back) after a schema or evidence failure, then "Insufficient data" |
 | `LLM_MIN_EVIDENCE_FACTS` | 2 | Moat and Devil's Advocate must cite at least 2 payload fields |
+| `DA_CACHE_PRICE_BAND` | 0.05 | The Devil's Advocate cache key replaces price-dependent payload values (price, upside, implied growth, Graham vs price, EV/EBIT, asset-floor ratios, trailing yield, the Quant line) with the price's 5% log-scale band, so small daily moves reuse the cached answer; the model still sees exact values on a fresh call |
 | `LLM_CACHE_DB_PATH` | `data/cache/llm_cache.db` | Permanent LLM response cache keyed by (ticker, lens, hash of model + payload, prompt version) |
 | `LEVERAGE_TREND_FLAT_BAND_FINANCIALS` | 1.0 | Macro leverage trend for financials and REITs (liabilities ÷ equity): ±1.0x is flat |
 | `DIVIDEND_EARNINGS_PAYOUT_MAX_FINANCIALS` | 1.0 | Dividend at risk for financials and REITs when earnings payout exceeds this (FCF payout is n/m for them) |

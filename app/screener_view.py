@@ -273,9 +273,15 @@ def scatter_points(results: list[ScreenResult], top_n: int = config.SCATTER_LABE
     Labels go to the top N by (quality rank + margin-of-safety rank), best first."""
     pts, excluded = [], []
     for r in results:
+        if r.status == STATUS_FAILED_TO_LOAD:
+            excluded.append(f"{r.ticker}: failed to load")
+            continue
         m = r.metric(SLOT_MOS)
         if m is None or not m.value.ok:
             excluded.append(f"{r.ticker}: margin of safety {m.value.status if m else 'N/A - Data Incomplete'}")
+            continue
+        if r.quality is None and r.decided_at_stage == 1:
+            excluded.append(f"{r.ticker}: cut at stage 1 (statements not fetched, so no quality score)")
             continue
         if r.quality is None or r.quality.score is None:
             excluded.append(f"{r.ticker}: quality {r.quality.display if r.quality else 'N/A - Data Incomplete'}")

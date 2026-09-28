@@ -209,6 +209,10 @@ LLM_MAX_TOKENS = 16000
 LLM_VALIDATION_RETRIES = 1  # one retry after a schema / evidence failure, then "Insufficient data"
 LLM_TIMEOUT_SECONDS = 300
 LLM_CACHE_DB_PATH = DATA_DIR / "cache" / "llm_cache.db"
+# The Devil's Advocate response cache ignores price moves inside one band this wide (log scale), so a
+# re-analysis on a new trading day doesn't re-score unless the price moved materially or anything
+# else in the payload changed. The model still sees the exact price on a fresh call.
+DA_CACHE_PRICE_BAND = 0.05
 
 # LLM backend (CLAUDE.md Rule 4). "auto": the Anthropic API when ANTHROPIC_API_KEY is set,
 # otherwise the Claude Code CLI (`claude -p`, the user's Claude subscription) when it can be
