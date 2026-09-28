@@ -217,6 +217,8 @@ def _htz(r):
     assert a.quant.method == "runway" and any(config.FLEET_RUNWAY_CAVEAT in n for n in a.quant.notes), \
         "HTZ runway should carry the fleet-capex caveat"
     assert "cash_runway_caveat" in a.devils_advocate.payload, "fleet caveat missing from the DA payload"
+    assert a.macro.debt_maturities is not None and a.macro.debt_maturities.status == "ok", \
+        f"HTZ 10-K debt maturity schedule missing: {a.macro.debt_maturities}"
     lead = r["analysis"].devils_advocate.payload["leadership"]
     assert LAYER_8K in lead["coverage"], f"DA payload leadership coverage {lead}"
     dd = r["charts"]["drawdown"]
@@ -255,6 +257,8 @@ def _lulu(r):
     assert r["fy_labels"][0].startswith("FY ending Jan"), f"LULU FY label wrong: {r['fy_labels'][:1]}"
     assert r["route"].sector == "Consumer Cyclical", "LULU sector should be Consumer Cyclical (retail threat framing in Phase 3)"
     _screened(r)
+    v = r["analysis"].turnaround.valuation
+    assert v is not None and v.ratio == "P/E" and v.status in ("ok", "not_cheap"), f"LULU valuation clock: {v}"
     moat = r["analysis"].moat
     hint = moat.payload["sector_threat_hint"]
     assert "private-label" in hint and "AI disruption" not in hint, f"LULU threat hint {hint!r}"

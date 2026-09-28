@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 import config
 from data.corporate_actions import Break
+from signals.valuation_history import ValuationRecovery
 
 MARKET_DRIVEN = "market-driven"
 COMPANY_SPECIFIC = "company-specific"
@@ -25,7 +26,7 @@ BASIS_ALL_TYPES = "all types (fallback)"
 BASIS_PEERS = "peer-based"
 PEER_LABEL = "Peer-based, lower confidence"
 STRUCTURAL_LABEL = "Low confidence — may not be mean-reverting"
-VALUATION_UNAVAILABLE = "Unavailable — needs longer fundamental history (FMP)"
+VALUATION_UNAVAILABLE = "Unavailable — not computed"
 
 
 class Segment(BaseModel):
@@ -185,7 +186,8 @@ class TurnaroundResult(BaseModel):
     structural_flag: bool = False
     structural_note: str = ""
     survivorship_caveat: str = config.TURNAROUND_SURVIVORSHIP_CAVEAT
-    valuation_recovery: str = VALUATION_UNAVAILABLE
+    valuation_recovery: str = VALUATION_UNAVAILABLE  # the display line of `valuation`
+    valuation: ValuationRecovery | None = None  # the valuation-based recovery clock (SEC XBRL history)
     catalysts: list[Catalyst] = Field(default_factory=list)
     debt_maturity_note: str = ""
     signals: list[TechnicalSignal] = Field(default_factory=list)

@@ -11,7 +11,7 @@ import pytest
 import config
 from analysis.models import AnalysisRun, DevilsAdvocateResult
 from analysis.turnaround import (
-    NO_SCREEN_RUN, VALUATION_FMP_TODO, PriceHistory, benchmark_drop, benchmark_for, build_history, classify,
+    NO_SCREEN_RUN, PriceHistory, benchmark_drop, benchmark_for, build_history, classify,
     confidence_level, double_bottom, insider_signal, load_history, macd_crossover, recovery_stats, rolling_high,
     segments, select_peers, turnaround, valuation_recovery_months, williams_r_signal,
 )
@@ -399,14 +399,11 @@ def test_asset_floor_line_appears_and_never_changes_range_or_confidence():
            (b.headline, b.iqr_months, b.median_months, b.confidence, b.confidence_reasons)
 
 
-def test_valuation_recovery_is_unavailable_without_fmp(monkeypatch):
-    monkeypatch.setenv("FMP_API_KEY", "")
+def test_valuation_recovery_without_sec_facts_says_why():
     stock, bench = scenario_a()
     r, _ = estimate(stock, bench)
-    assert r.valuation_recovery == VALUATION_UNAVAILABLE
-    assert "Debt maturity dates: not shown" in r.debt_maturity_note
-    monkeypatch.setenv("FMP_API_KEY", "key")
-    assert estimate(stock, bench)[0].valuation_recovery == VALUATION_FMP_TODO
+    assert r.valuation is not None and r.valuation_recovery.startswith("Unavailable — N/A - SEC EDGAR not loaded")
+    assert "Debt maturity dates: not shown — N/A - SEC EDGAR not loaded" in r.debt_maturity_note
 
 
 def test_valuation_recovery_helper_measures_spells_back_to_the_median():

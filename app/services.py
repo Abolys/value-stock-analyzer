@@ -12,7 +12,6 @@ import config
 
 from data.cache import CachedProvider, DiskCache
 from data.edgar import EdgarClient
-from data.fallback import FallbackProvider
 from data.health import HealthReport, cached_health_check
 from data.provider import ProviderError
 from data.risk_free import fetch_boc_valet
@@ -29,7 +28,7 @@ def build_provider() -> CachedProvider:
 
         # A separate cache file: fixture data must never be served to the live app later.
         return CachedProvider(fixture_provider(), DiskCache(config.CACHE_DB_PATH.with_name("fixtures_cache.db")))
-    return CachedProvider(FallbackProvider(YFinanceProvider()), DiskCache())
+    return CachedProvider(YFinanceProvider(), DiskCache())
 
 
 def valet_fetch():

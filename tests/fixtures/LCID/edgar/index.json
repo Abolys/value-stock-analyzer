@@ -29,5 +29,6 @@
  "https://www.sec.gov/Archives/edgar/data/1811210/000110465926053234/tm2612717-1_4seq1.xml": "78407d51ce7fbebd.xml",
  "https://www.sec.gov/Archives/edgar/data/1811210/000162828026028005/wk-form4_1777410403.xml": "bbfce43736ce4ad0.xml",
  "https://www.sec.gov/Archives/edgar/data/1811210/000162828026025745/wk-form4_1776456761.xml": "13b751ab212e3bb5.xml",
- "https://data.sec.gov/submissions/CIK0001811210.json": "0831d770e19c2488.json"
+ "https://data.sec.gov/submissions/CIK0001811210.json": "0831d770e19c2488.json",
+ "https://data.sec.gov/api/xbrl/companyfacts/CIK0001811210.json": "f57cbac63ab859c6.json"
 }

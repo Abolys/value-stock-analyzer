@@ -43,12 +43,16 @@ from analysis.turnaround_models import (
     Episode, Peer, PeerHistory, PeerSelection, RecoveryStats, Segment, TechnicalSignal, TurnaroundResult,
 )
 from data import corporate_actions as ca
-from data import prices
+from data import currency, prices
 from data.corporate_actions import Break
 from data.provider import DataProvider, ProviderError
 from data.universe import list_labels, load_universe
+from data.xbrl import debt_maturities
 from signals.asset_floor import AssetFloor
 from signals.insider_activity import InsiderSummary, cluster_buy
+from signals.valuation_history import (  # noqa: F401  (valuation_recovery_months re-exported)
+    ValuationRecovery, valuation_recovery, valuation_recovery_months,
+)
 from storage import screen_store
 
 if TYPE_CHECKING:
@@ -57,7 +61,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 NO_SCREEN_RUN = "Unavailable - no screen run with results yet (peers' industry and market cap unknown)"
-VALUATION_FMP_TODO = "Unavailable — FMP is configured but its historical ratios are not implemented yet"
 
 
 # --------------------------------------------------------------------------
@@ -598,10 +601,20 @@ def catalysts(x: "AnalysisInputs", run: AnalysisRun | None) -> tuple[list[Cataly
     if da is not None and da.ok:
         for req in da.bull_case_requirements:
             out.append(Catalyst(kind="lens", text=req, source="Devil's Advocate: what the bull case needs"))
-    note = ("Debt maturity dates: not shown — no source supplied them (FMP not configured). The Macro lens's "
-            "current vs long-term debt split is the proxy." if not config.fmp_enabled() else
-            "Debt maturity dates: not shown — the FMP maturity schedule is not implemented yet. The Macro lens's "
-            "current vs long-term debt split is the proxy.")
+    dm = debt_maturities(x.xbrl, x.today) if x.xbrl is not None else None
+    if dm is not None and dm.status == "ok" and dm.buckets:
+        from analysis.fmt import human as _h
+
+        due = [(k, v) for k, v in dm.buckets.items() if k in ("next 12 months", "year 2")]
+        text = "; ".join(f"{_h(v)} due in the {k}" if k == "next 12 months" else f"{_h(v)} in {k}" for k, v in due)
+        share = f" ({dm.within_two_years / dm.total:.0%} of scheduled principal)" if dm.total > 0 else ""
+        out.append(Catalyst(kind="debt_maturity", date=dm.as_of, text=f"Debt maturities: {text}{share}",
+                            source=f"{dm.source}, fiscal year end {dm.as_of}"))
+        note = f"Debt maturities: {dm.line()}"
+    else:
+        why = dm.status if dm is not None else x.xbrl_status
+        note = (f"Debt maturity dates: not shown — {why}. The Macro lens's current vs long-term debt split "
+                "is the proxy.")
     return out, note
 
 
@@ -644,28 +657,21 @@ def data_catalysts(x: "AnalysisInputs") -> list[Catalyst]:
     return out
 
 
-def valuation_recovery_status() -> str:
-    return VALUATION_FMP_TODO if config.fmp_enabled() else VALUATION_UNAVAILABLE
-
-
-def valuation_recovery_months(ratio: pd.Series, cheap_below: bool = True) -> tuple[float | None, list[float]]:
-    """Completed spells on the cheap side of the ratio's own VALUATION_RECOVERY_YEARS median
-    (below it for P/E and P/B, above it for FCF yield), in months from the spell's start to
-    the first day back at the median. Returns (median, spell lengths). Ready for FMP history."""
-    s = ratio.dropna().sort_index()
-    if s.empty:
-        return None, []
-    s = s[s.index >= s.index[-1] - pd.DateOffset(years=config.VALUATION_RECOVERY_YEARS)]
-    med = float(s.median())
-    cheap = s < med if cheap_below else s > med
-    spells, start = [], None
-    for d, c in cheap.items():
-        if c and start is None:
-            start = d
-        elif not c and start is not None:
-            spells.append(_months(start.date(), d.date()))
-            start = None
-    return med, spells
+def valuation_for(x: "AnalysisInputs", provider: DataProvider) -> ValuationRecovery:
+    """The valuation-based recovery clock from SEC XBRL history and actual closes (never raises)."""
+    if x.xbrl is None:
+        return ValuationRecovery(status=f"Unavailable — {x.xbrl_status}")
+    try:
+        closes = prices.actual_closes(provider, x.ticker)
+        splits = provider.get_splits(x.ticker)
+    except ProviderError as exc:
+        return ValuationRecovery(status=f"Unavailable — price history ({exc})")
+    fx = None
+    trading = x.info.get("currency")
+    unit = (x.xbrl.concept("net_income").unit or x.xbrl.concept("equity").unit) if x.xbrl else ""
+    if x.xbrl is not None and trading and unit and unit != trading:
+        fx = currency.fx_rate(provider, unit, trading)
+    return valuation_recovery(x.xbrl, x.xbrl_status, closes, splits, x.route.sector_adjusted, fx)
 
 
 def asset_floor_line(af: AssetFloor | None) -> str:
@@ -694,7 +700,9 @@ def turnaround(x: "AnalysisInputs", run: AnalysisRun | None, provider: DataProvi
     symbol = benchmark_for(x.ticker)
     res = TurnaroundResult(ticker=x.ticker, benchmark=symbol or "", listing_country=country,
                            assumptions=assumptions(symbol), asset_floor_line=asset_floor_line(x.screen.asset_floor),
-                           valuation_recovery=valuation_recovery_status())
+                           )
+    res.valuation = valuation_for(x, provider)
+    res.valuation_recovery = res.valuation.display
     res.catalysts, res.debt_maturity_note = catalysts(x, run)
     res.structural_flag, res.structural_note = structural_flag(run)
     try:

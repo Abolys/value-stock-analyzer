@@ -5,7 +5,6 @@ import pytest
 
 import config
 from data import currency, prices
-from data.fallback import FallbackProvider
 from data.fixture_provider import _NoThrottle, fixture_provider
 from data.provider import InfoResult, ProviderError, ProviderUnavailable, Statement
 from data.yfinance_provider import YFinanceProvider
@@ -117,44 +116,6 @@ def test_missing_fx_rate_gives_na_not_wrong_currency():
                       statuses={"currency": "ok", "financial_currency": "ok", "trailing_eps": "ok"})
     vals = currency.info_datums(info, fx=None)
     assert vals["trailing_eps"].value is None and vals["trailing_eps"].status.startswith("N/A")
-
-
-# ---------------------------------------------------------------- FMP fallback
-class FailingProvider(YFinanceProvider):
-    name = "yfinance"
-
-    def __init__(self):
-        super().__init__(throttle=_NoThrottle(), sleep=lambda s: None)
-
-    def get_statement(self, ticker, kind, freq):
-        raise ProviderError("yahoo broke")
-
-
-class FakeFMP(FailingProvider):
-    name = "fmp"
-
-    def get_statement(self, ticker, kind, freq):
-        return Statement(ticker=ticker, kind=kind, freq=freq, values={"total_revenue": {date(2026, 6, 30): 5.0}},
-                         provider="fmp")
-
-
-def test_fmp_fallback_only_when_configured(monkeypatch):
-    fb = FallbackProvider(FailingProvider(), secondary_factory=FakeFMP)
-    monkeypatch.setenv("FMP_API_KEY", "")
-    with pytest.raises(ProviderError):
-        fb.get_statement("X", "income", "annual")
-    assert fb.fallback_log == []
-    monkeypatch.setenv("FMP_API_KEY", "secret")
-    stmt = fb.get_statement("X", "income", "annual")
-    assert stmt.provider == "fmp" and fb.fallback_log[0][1] == "X"
-
-
-def test_fmp_stub_disabled_without_key(monkeypatch):
-    from data.fmp_provider import FMPProvider
-
-    monkeypatch.setattr(config, "FMP_API_KEY", "")
-    with pytest.raises(ProviderUnavailable):
-        FMPProvider()
 
 
 def test_every_value_records_its_provider(fx_provider):

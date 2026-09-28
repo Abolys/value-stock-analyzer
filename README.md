@@ -16,7 +16,7 @@ A personal research app: screens for value stocks, runs a four-lens analysis (Qu
 ## Start
 
 1. Unzip into an empty folder and run `git init`.
-2. `cp .env.example .env`, then fill in `ANTHROPIC_API_KEY` and `SEC_USER_AGENT` (your name and email; the SEC requires it). FMP and SMTP are optional. The Anthropic key is billed through the Claude Console, separately from your Claude subscription.
+2. `cp .env.example .env`, then fill in `ANTHROPIC_API_KEY` and `SEC_USER_AGENT` (your name and email; the SEC requires it). SMTP is optional. The Anthropic key is billed through the Claude Console, separately from your Claude subscription.
 3. Run `claude` in the folder.
 4. Switch to plan mode (Shift+Tab), type `/phase-1`, review the plan, approve.
 5. When Phase 1 passes its checklist and commits, start a fresh session and run `/phase-2`. Continue through `/phase-6`.

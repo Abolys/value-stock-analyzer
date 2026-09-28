@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config  # noqa: E402
 from data.cache import CachedProvider  # noqa: E402
-from data.fallback import FallbackProvider  # noqa: E402
 from data.provider import DataProvider, ProviderError  # noqa: E402
 from data.universe import load_list  # noqa: E402
 from data.yfinance_provider import YFinanceProvider  # noqa: E402
@@ -53,7 +52,7 @@ def main() -> int:
     if not tickers:
         print("No unscreened watchlist/dataroma tickers.")
         return 0
-    provider = CachedProvider(FallbackProvider(YFinanceProvider()))
+    provider = CachedProvider(YFinanceProvider())
     for t, msg in run(provider, tickers).items():
         print(f"{t}: {msg}")
     return 0

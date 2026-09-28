@@ -4,7 +4,7 @@ and "Data source resilience").
 1. Health check first; a failure records the run as "blocked: health check
    failed" and nothing starts.
 2. Batch prices for every remaining ticker; tickers the batch misses are tried
-   one at a time (the per-ticker FMP fallback path).
+   one at a time.
 3. One ticker at a time through both stages; each result is committed, so
    --resume continues without redoing finished tickers (tickers that failed
    to load are retried).

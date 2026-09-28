@@ -137,6 +137,17 @@ class EdgarClient:
         m = self.ticker_map()
         return m.get(t) or m.get(t.replace("-", "."))
 
+    def company_facts(self, cik: int):
+        """The company's XBRL facts (data/xbrl.py), parsed; cached under the price TTL (a day) so a
+        new 10-Q or 10-K shows up promptly. The parsed subset is cached, not the multi-MB JSON."""
+        from data.xbrl import FACTS_URL, parse_company_facts
+
+        url = FACTS_URL.format(cik=cik)
+        fetch = lambda: parse_company_facts(self._get(url).json())  # noqa: E731
+        if self.cache is None:
+            return fetch()
+        return self.cache.fetch(f"edgar|facts|{cik}", "prices", fetch)
+
     def submissions(self, cik: int) -> dict:
         return self._json(SUBMISSIONS_URL.format(cik=cik))
 

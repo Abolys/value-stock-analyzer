@@ -21,12 +21,6 @@ load_dotenv(ROOT / ".env")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-5"
 SEC_USER_AGENT = os.getenv("SEC_USER_AGENT", "")
-FMP_API_KEY = os.getenv("FMP_API_KEY", "")
-
-
-def fmp_enabled() -> bool:
-    """FMP is used only when a key is configured (read at call time so tests can toggle it)."""
-    return bool(os.getenv("FMP_API_KEY", "").strip())
 
 
 # --------------------------------------------------------------------------
@@ -323,8 +317,17 @@ DOUBLE_BOTTOM_PIVOT_DAYS = 5  # a pivot low is the lowest close within ± this m
 DOUBLE_BOTTOM_TOLERANCE = 0.03  # the two lows within 3% of each other
 DOUBLE_BOTTOM_MIN_SEPARATION_DAYS = 20  # trading days between the lows
 DOUBLE_BOTTOM_MIN_BOUNCE = 0.10  # neckline at least 10% above the higher low
-# Valuation-based recovery (needs FMP): the ratio's own median over this many years.
+# Valuation-based recovery (SEC EDGAR XBRL history): the ratio's own median over this many years.
 VALUATION_RECOVERY_YEARS = 5
+# P/E is used when meaningful (TTM net income > 0) on at least this share of the window's days,
+# else P/B on the same test; financials and REITs use P/B.
+VALUATION_MIN_COVERAGE = 0.8
+# A cheap spell starts this far beyond the median on the cheap side (and ends back at the median), so
+# day-to-day wobbles around the median aren't counted; the current ratio is "cheap" on the same test.
+VALUATION_CHEAP_MARGIN = 0.15
+# The 10-K debt maturity schedule is annual: one whose year end is older than this (a year plus the
+# filing lag and a quarter's slack) is treated as unavailable and the proxy is shown instead.
+DEBT_SCHEDULE_MAX_AGE_DAYS = 550
 
 # --------------------------------------------------------------------------
 # Leadership turnover

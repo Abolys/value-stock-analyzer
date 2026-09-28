@@ -306,7 +306,8 @@ def data_gaps(run: AnalysisRun, chart_map: dict[str, ChartOut | None] | None = N
     if t is not None:
         if t.status.startswith("Insufficient"):
             gaps.append(("Turnaround", t.status))
-        gaps.append(("Valuation-based recovery", t.valuation_recovery))
+        if t.valuation is None or t.valuation.status not in ("ok", "not_cheap"):
+            gaps.append(("Valuation-based recovery", t.valuation_recovery))
         gaps.extend(("Turnaround note", n) for n in t.notes)
     gaps.extend(("Note", n) for n in run.notes)
     for key, c in (chart_map or {}).items():

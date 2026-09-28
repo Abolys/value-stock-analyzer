@@ -14,6 +14,7 @@ import config
 from analysis.turnaround_models import TurnaroundResult, Week52
 from data.leadership import LeadershipResult
 from data.values import Datum
+from data.xbrl import DebtMaturities
 from screening.models import ScreenResult
 from signals.context import ContextFields
 from signals.cyclicality import Cyclicality
@@ -100,6 +101,7 @@ class MacroResult(LensResult):
     current_debt: Datum = Field(default_factory=Datum.missing)
     long_term_debt: Datum = Field(default_factory=Datum.missing)
     maturity_note: str = ""
+    debt_maturities: DebtMaturities | None = None  # the 10-K schedule (SEC XBRL), when filed
 
 
 class EvidenceItem(BaseModel):

@@ -4,6 +4,7 @@ Saves the raw yfinance objects (so tests run the real field-map code path)
 plus trimmed EDGAR responses into tests/fixtures/<TICKER>/. Run once (live):
 
     python scripts/capture_fixtures.py [TICKER ...] [--edgar-only]
+    python scripts/capture_fixtures.py [TICKER ...] --facts-only   # SEC XBRL company facts only
 
 Tests assert branches, not live numbers, so fixtures don't need refreshing
 unless a test needs newer data.
@@ -174,7 +175,30 @@ def capture_edgar(tickers: list[str], rec: Recorder) -> None:
     rec.save("_SEC", TICKER_MAP_URL, json.dumps(trimmed_map))
 
 
+def capture_facts(tickers: list[str], rec: Recorder) -> None:
+    """SEC XBRL company facts, trimmed to the concepts in data/xbrl.XBRL_TAGS (the full files are MBs)."""
+    from data.xbrl import FACTS_URL, XBRL_TAGS
+
+    client = rec.client
+    wanted = {pair for aliases in XBRL_TAGS.values() for pair in aliases}
+    for t in tickers:
+        cik = client.lookup_cik(t)
+        if cik is None:
+            print(f"  {t}: no CIK; no XBRL facts")
+            continue
+        data = client._get(FACTS_URL.format(cik=cik)).json()
+        data["facts"] = {tax: {c: v for c, v in concepts.items() if (tax, c) in wanted}
+                         for tax, concepts in (data.get("facts") or {}).items()}
+        rec.save(t, FACTS_URL.format(cik=cik), json.dumps(data))
+        print(f"  {t}: CIK {cik}, {sum(len(v) for v in data['facts'].values())} XBRL concepts kept")
+
+
 def main(argv: list[str]) -> int:
+    if "--facts-only" in argv:
+        rec = Recorder(EdgarClient())
+        capture_facts([a for a in argv if not a.startswith("--")] or list(config.GOLDEN_TICKERS), rec)
+        rec.flush()
+        return 0
     edgar_only = "--edgar-only" in argv
     argv = [a for a in argv if not a.startswith("--")]
     full = argv or [*config.GOLDEN_TICKERS, *config.CANARY_TICKERS, *EXTRA_FULL]
@@ -187,6 +211,7 @@ def main(argv: list[str]) -> int:
             capture_yf(t, full=False)
     rec = Recorder(EdgarClient())
     capture_edgar([t for t in full if t in config.GOLDEN_TICKERS or t in config.CANARY_TICKERS], rec)
+    capture_facts([t for t in full if t in config.GOLDEN_TICKERS], rec)
     rec.flush()
     print("done")
     return 0

@@ -1,7 +1,7 @@
 """The provider-neutral data interface.
 
 Screening and analysis code talks only to `DataProvider` and the result models
-below, using canonical field names from data/field_map.py. A new source (FMP)
+below, using canonical field names from data/field_map.py. A new price or statement source
 is added by implementing this interface; nothing downstream changes.
 """
 

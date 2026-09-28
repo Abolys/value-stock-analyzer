@@ -20,6 +20,7 @@ from analysis.models import FundamentalSeries, SeriesPoint
 from data import field_map as fm
 from data.fundamentals import Fundamentals
 from data.insiders import collect_insider_data
+from data.xbrl import CompanyFacts
 from data.leadership import FilingDoc, LeadershipResult, LLMConfirmation, leadership_flag
 from data.provider import AnalystEstimates, InfoResult, ProviderError
 from data.sector import SectorRoute, route
@@ -51,6 +52,8 @@ class AnalysisInputs(BaseModel):
     leadership: LeadershipResult | None = None
     context: ContextFields
     notes: list[str] = []
+    xbrl: CompanyFacts | None = None  # SEC EDGAR XBRL facts (long history; US and other SEC filers)
+    xbrl_status: str = "N/A - SEC EDGAR not loaded"
 
     # Convenience accessors onto the screen result's inputs (already in the trading currency).
     @property
@@ -100,6 +103,19 @@ def fundamental_series(f: Fundamentals, currency: str | None) -> FundamentalSeri
 Confirm = Callable[[FilingDoc, str], LLMConfirmation]
 
 
+def load_xbrl(edgar: EdgarClient | None, ticker: str) -> tuple[CompanyFacts | None, str]:
+    """(facts, status). Only SEC filers have them; TSX-only companies never do (SEDAR+ isn't automated)."""
+    if edgar is None:
+        return None, "N/A - SEC EDGAR not loaded"
+    try:
+        cik = edgar.lookup_cik(ticker)
+        if cik is None:
+            return None, "N/A - not an SEC filer (no XBRL history; e.g. TSX-only)"
+        return edgar.company_facts(cik), "ok"
+    except ProviderError as exc:
+        return None, f"N/A - SEC XBRL facts unavailable ({exc})"
+
+
 def load_inputs(ctx: ScreenContext, ticker: str, edgar: EdgarClient | None = None,
                 confirm: Confirm | None = None) -> AnalysisInputs:
     screen, f, info = screen_ticker_full(ctx, ticker, sources=MANUAL_SOURCE, force_stage2=True)
@@ -123,8 +139,10 @@ def load_inputs(ctx: ScreenContext, ticker: str, edgar: EdgarClient | None = Non
     if edgar is None:
         notes.append("EDGAR not loaded: leadership from officer snapshots and the manual CSV only; "
                      "insiders from the manual CSV only")
+    xbrl, xbrl_status = load_xbrl(edgar, ticker)
     return AnalysisInputs(
-        ticker=ticker, today=ctx.today, info=info, route=route(info), f=f, screen=screen,
+        ticker=ticker, today=ctx.today, info=info, route=route(info), f=f, screen=screen, xbrl=xbrl,
+        xbrl_status=xbrl_status,
         cyclicality=cyclicality(info.get("sector"), info.get("industry")),
         dividends=dividend_safety(divs, f, screen.price, ctx.today, route(info).sector_adjusted),
         insiders=insider_summary(ins, ctx.today), leadership=lead,

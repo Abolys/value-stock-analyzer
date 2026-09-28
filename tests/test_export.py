@@ -92,7 +92,9 @@ def test_data_gaps_and_unrendered_charts_listed(lulu):
     rows = {tuple(r) for t in gaps.tables for r in t.rows}
     assert ("Business Moat", run.moat.status) in rows or run.moat.ok  # an LLM lens gap is listed if any
     assert any("not rendered: RuntimeError: Chrome not found" in r[1] for r in rows)
-    assert any(r[0] == "Valuation-based recovery" for r in rows)
+    # LULU files with the SEC: its valuation-based recovery is computed from XBRL history, so it's not a gap
+    assert run.turnaround.valuation.status in ("ok", "not_cheap")
+    assert not any(r[0] == "Valuation-based recovery" for r in rows)
     doc = Document(io.BytesIO(to_docx(rep)))
     assert any("chart not rendered" in p.text for p in doc.paragraphs)
 

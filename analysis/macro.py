@@ -11,8 +11,9 @@ The score is the average of the sub-scores that have data (the ones used are rep
   financials: liabilities / equity with ±LEVERAGE_TREND_FLAT_BAND_FINANCIALS).
 - Cyclicality from SECTOR_CYCLICALITY with INDUSTRY_CYCLICALITY_OVERRIDES.
 
-Debt maturity: free sources give no maturity schedule, so the current vs
-long-term debt split is shown as a proxy and labelled as such.
+Debt maturity (information, never scored): the 10-K schedule of principal due (next 12 months,
+years 2–5, after 5) from SEC EDGAR XBRL when the company files one; otherwise the current vs
+long-term debt split, shown as a proxy and labelled as such.
 
 Financials and REITs: net debt/EBITDA and interest coverage are N/A; the lens
 uses the leverage trend (liabilities / equity, its own flat band) and
@@ -30,13 +31,14 @@ from analysis.models import MacroResult, insufficient
 from data.fundamentals import Fundamentals
 from data.ratios import safe_ratio, sum_datums
 from data.values import Datum, nm
+from data.xbrl import debt_maturities
 from screening.metrics import cash_runway, net_debt, net_debt_to_ebitda, ttm_fcf
 from signals.mapping import MappingStep, mapped, mapping_line
 from signals.valuation import liquid_cash, ttm_ebit
 
 SUBSCORES = ["net debt / EBITDA", "interest coverage", "Altman Z''", "leverage trend", "cyclicality"]
-MATURITY_NOTE = ("Maturity proxy: current vs long-term debt split (free sources give no reliable maturity "
-                 "schedule; no specific maturity dates are shown)")
+MATURITY_NOTE = ("Maturity proxy: current vs long-term debt split; no specific maturity dates are shown "
+                 "(no maturity schedule available")
 SA_NA = "N/A - sector-adjusted (not meaningful for financials and REITs)"
 
 
@@ -181,12 +183,20 @@ def macro_lens(x: AnalysisInputs) -> MacroResult:
     split = (f"current {d_num(cur)} vs long-term {d_num(lt)}"
              + (f" ({cur.value / (cur.value + lt.value):.0%} due within a year)"
                 if cur.ok and lt.ok and cur.value + lt.value > 0 else ""))
-    res.maturity_note = f"{MATURITY_NOTE}: {split}"
+    dm = debt_maturities(x.xbrl, x.today) if x.xbrl is not None else None
+    res.debt_maturities = dm
+    if dm is not None and dm.status == "ok" and dm.buckets:
+        maturity = dm.line()
+        res.maturity_note = f"Debt maturities ({dm.source}): {maturity}"
+    else:
+        why = dm.status if dm is not None else x.xbrl_status
+        maturity = f"proxy — {split}"
+        res.maturity_note = f"{MATURITY_NOTE}: {why}): {split}"
     res.key_figures = {"Net debt / EBITDA": d_x(res.net_debt_ebitda),
                        "Interest coverage": d_x(res.interest_coverage),
                        "Altman Z''": x.screen.altman.display if x.screen.altman else "N/A",
                        "Leverage trend": res.leverage_trend, "Cyclicality": x.cyclicality.detail,
-                       "Debt maturity (proxy)": split}
+                       "Debt maturity": maturity}
     res.assumptions = {"NET_DEBT_EBITDA_BREAKPOINTS": config.NET_DEBT_EBITDA_BREAKPOINTS,
                        "INTEREST_COVERAGE_BREAKPOINTS": config.INTEREST_COVERAGE_BREAKPOINTS,
                        "ALTMAN_BREAKPOINTS": config.ALTMAN_BREAKPOINTS,

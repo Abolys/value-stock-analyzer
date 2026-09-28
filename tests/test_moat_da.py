@@ -24,7 +24,7 @@ EXAMPLE_KEYS = ["dcf_implied_upside", "cash_runway_months", "roic_vs_cost_of_cap
                 "ev_ebit_yield", "insiders_6mo", "dividend", "asset_floor", "insider_ownership", "short_interest",
                 "estimate_revisions_90d"]
 SIGNAL_KEYS = EXAMPLE_KEYS + ["piotroski_accrual_check", "beneish_m", "altman_z", "graham_number",
-                              "interest_coverage", "leverage_trend", "debt_maturity_proxy", "share_count_trend",
+                              "interest_coverage", "leverage_trend", "debt_maturity", "share_count_trend",
                               "dilution_flag", "not_meaningful", "lenses"]
 ASSET_FLOOR_KEYS = {"tbv", "p_tbv", "coverage", "ncav_to_mcap", "nnwc_to_mcap", "net_net"}
 

@@ -193,7 +193,7 @@ def build_da_payload(x: AnalysisInputs, quant: QuantResult | None, macro: MacroR
         "net_debt_ebitda": d_x(lev),
         "interest_coverage": d_x(cov),
         "leverage_trend": macro.leverage_trend if macro is not None else "N/A",
-        "debt_maturity_proxy": macro.key_figures.get("Debt maturity (proxy)", "N/A") if macro is not None else "N/A",
+        "debt_maturity": macro.key_figures.get("Debt maturity", "N/A") if macro is not None else "N/A",
         "cyclicality": x.cyclicality.detail,
         "moat_threat": (moat.sector_threat if moat is not None and moat.ok else
                         (moat.status if moat is not None else "N/A - Moat lens did not run")),
