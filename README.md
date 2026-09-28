@@ -51,6 +51,7 @@ See "After the build" in `docs/BUILD_PROMPTS.md`: the weekly screen schedule, mo
   0 2 * * 0  cd /path/to/value-stock-analyzer && .venv/bin/python scripts/run_screen.py --lists cowz,cash_cows_small,sp400,sp600,tsx_composite,watchlist,dataroma
   ```
 
+- Canadian coverage: after refreshing the universe, run `python scripts/map_sec_ciks.py` so cross-listed TSX names get their SEC history (valuation-based recovery, debt maturities, 6-K leadership check). Review the `auto:` rows it writes to `data/sec_cik_overrides.csv`; add by hand any company it misses because it is named differently on each exchange.
 - Email is off unless `SMTP_HOST` and `ALERT_EMAIL_TO` are set in `.env`. `SMTP_PORT` defaults to 587 (STARTTLS). `SMTP_USER` and `SMTP_PASSWORD` are used when set, and `ALERT_EMAIL_FROM` defaults to `SMTP_USER`. For Gmail, use an app password.
 
 Personal research tool, not investment advice.

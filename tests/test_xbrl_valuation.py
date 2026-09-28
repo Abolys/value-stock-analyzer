@@ -142,3 +142,56 @@ def test_golden_facts_load_through_the_edgar_fixtures(fx_provider, db_path):
     assert dm.status == "ok" and "next 12 months" in dm.buckets
     no_edgar = fixture_inputs(fx_provider, "HTZ", db_path)
     assert no_edgar.xbrl is None and no_edgar.xbrl_status == "N/A - SEC EDGAR not loaded"
+
+
+def test_most_recent_alias_wins_when_a_company_switches_concepts():
+    data = facts_json(net_income=[fact("2016-01-01", "2016-12-31", 50, "2017-02-20", form="10-K")])
+    data["facts"]["ifrs-full"] = {"ProfitLoss": {"units": {"CAD": [
+        fact("2025-01-01", "2025-12-31", 90, "2026-02-20", form="40-F")]}}}
+    c = parse_company_facts(data).concept("net_income")
+    assert c.tag == "ifrs-full:ProfitLoss" and c.unit == "CAD" and c.facts[-1].value == 90
+
+
+def test_six_k_facts_count_for_canadian_filers():
+    data = facts_json(net_income=[fact("2025-01-01", "2025-03-31", 40, "2025-05-01", form="6-K")])
+    assert parse_company_facts(data).concept("net_income").facts[0].value == 40
+
+
+def test_share_counts_fall_back_to_yfinance_history():
+    facts = _world()
+    facts.concepts.pop("shares_outstanding")
+    closes = pd.Series(20.0, index=pd.bdate_range("2020-06-01", "2024-12-31"))
+    assert valuation_recovery(facts, "ok", closes, None, False).status.startswith("Insufficient data - shares")
+    yf_shares = pd.Series(100.0, index=pd.date_range("2019-01-31", "2024-12-31", freq="ME"))
+    v = valuation_recovery(facts, "ok", closes, None, False, fallback_shares=yf_shares)
+    assert v.ratio == "P/E" and v.median == pytest.approx(20.0)
+    assert any("yfinance's share history" in n for n in v.notes)
+
+
+def test_tsx_names_match_the_sec_filer_of_the_same_company():
+    from data.sec_names import match_names, normalise
+
+    sec = [{"cik": 16868, "name": "CANADIAN NATIONAL RAILWAY CO", "ticker": "CNI", "exchange": "NYSE"},
+           {"cik": 947263, "name": "TORONTO DOMINION BANK", "ticker": "TD", "exchange": "NYSE"},
+           {"cik": 1, "name": "BANK OF MONTREAL /CAN/", "ticker": "BMO", "exchange": "NYSE"},
+           {"cik": 2, "name": "Dollarama Inc./ADR", "ticker": "DLMAY", "exchange": "OTC"},
+           {"cik": 3, "name": "ALPHA MINING GOLD CORP", "ticker": "AMX", "exchange": "NYSE"},
+           {"cik": 4, "name": "ALPHA MINING PARTNERS", "ticker": "AMP", "exchange": "NYSE"}]
+    listings = [("CNR.TO", "CANADIAN NATIONAL RAILWAY"), ("TD.TO", "TORONTO DOMINION"),
+                ("BMO.TO", "BANK OF MONTREAL"), ("DOL.TO", "DOLLARAMA"), ("AM.TO", "ALPHA MINING"),
+                ("CSU.TO", "CONSTELLATION SOFTWARE")]
+    matches, unmatched = match_names(listings, sec)
+    got = {m.ticker: (m.cik, m.kind) for m in matches}
+    assert got == {"CNR.TO": (16868, "exact"), "TD.TO": (947263, "prefix"), "BMO.TO": (1, "exact")}
+    assert {t for t, _ in unmatched} == {"DOL.TO", "AM.TO", "CSU.TO"}  # ADR shell, ambiguous prefix, not a filer
+    assert normalise("SHOPIFY SUBORDINATE VOTING CLASS A") == normalise("SHOPIFY INC.")
+    assert all(m.note.startswith("auto:") for m in matches)
+
+
+def test_mapped_tsx_ticker_resolves_to_its_cik(tmp_path):
+    from data.edgar import EdgarClient
+
+    p = tmp_path / "ovr.csv"
+    p.write_text("ticker,cik,note\nTD.TO,947263,auto: prefix name match\n")
+    ed = EdgarClient(user_agent="t t@example.com", session=object(), overrides_path=p)
+    assert ed.lookup_cik("TD.TO") == 947263 and ed.lookup_cik("XYZ.TO") is None

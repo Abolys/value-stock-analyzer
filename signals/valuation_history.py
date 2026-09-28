@@ -106,15 +106,20 @@ def split_factor_after(splits: pd.Series | None, d: date) -> float:
     return f
 
 
-def ratio_series(facts: CompanyFacts, closes: pd.Series, splits: pd.Series | None, fx: float = 1.0
-                 ) -> dict[str, pd.Series]:
-    """{"P/E": series, "P/B": series} on the price days, NaN where not meaningful or not yet known."""
+def ratio_series(facts: CompanyFacts, closes: pd.Series, splits: pd.Series | None, fx: float = 1.0,
+                 fallback_shares: pd.Series | None = None) -> dict[str, pd.Series]:
+    """{"P/E": series, "P/B": series} on the price days, NaN where not meaningful or not yet known.
+    Share counts come from XBRL, else from `fallback_shares` (yfinance's share-count history, known
+    from its own dates); either way restated for later splits."""
     days = pd.DatetimeIndex(closes.index)
     sh = facts.concept("shares_outstanding")
-    if sh.status != "ok":
+    if sh.status == "ok":
+        points = instant_points(sh)
+    elif fallback_shares is not None and len(fallback_shares.dropna()):
+        points = [(ts.date(), ts.date(), float(v)) for ts, v in fallback_shares.dropna().items()]
+    else:
         return {}
-    shares = known_on([(end, known, v * split_factor_after(splits, end)) for end, known, v in instant_points(sh)],
-                      days)
+    shares = known_on([(end, known, v * split_factor_after(splits, end)) for end, known, v in points], days)
     mcap = closes.astype(float) * shares
     out: dict[str, pd.Series] = {}
     ni = facts.concept("net_income")
@@ -134,7 +139,8 @@ def _quartiles(xs: list[float]) -> tuple[float, float, float]:
 
 
 def valuation_recovery(facts: CompanyFacts | None, facts_status: str, closes: pd.Series | None,
-                       splits: pd.Series | None, sector_adjusted: bool, fx: Datum | None = None) -> ValuationRecovery:
+                       splits: pd.Series | None, sector_adjusted: bool, fx: Datum | None = None,
+                       fallback_shares: pd.Series | None = None) -> ValuationRecovery:
     if facts is None:
         return ValuationRecovery(status=f"Unavailable — {facts_status}")
     if closes is None or closes.dropna().empty:
@@ -147,9 +153,11 @@ def valuation_recovery(facts: CompanyFacts | None, facts_status: str, closes: pd
         rate = fx.value
         notes.append(f"reported figures converted at {rate:.4f} ({fx.period_label})")
     closes = closes.dropna().sort_index()
-    series = ratio_series(facts, closes, splits, rate)
+    series = ratio_series(facts, closes, splits, rate, fallback_shares)
     if not series:
-        return ValuationRecovery(status=f"{INSUFFICIENT} - shares outstanding not reported in XBRL")
+        return ValuationRecovery(status=f"{INSUFFICIENT} - shares outstanding not reported in XBRL or yfinance")
+    if facts.concept("shares_outstanding").status != "ok":
+        notes.append("share counts from yfinance's share history (not in the SEC facts)")
     start = closes.index[-1] - pd.DateOffset(years=config.VALUATION_RECOVERY_YEARS)
     order = ["P/B"] if sector_adjusted else ["P/E", "P/B"]
     tried = []

@@ -671,7 +671,13 @@ def valuation_for(x: "AnalysisInputs", provider: DataProvider) -> ValuationRecov
     unit = (x.xbrl.concept("net_income").unit or x.xbrl.concept("equity").unit) if x.xbrl else ""
     if x.xbrl is not None and trading and unit and unit != trading:
         fx = currency.fx_rate(provider, unit, trading)
-    return valuation_recovery(x.xbrl, x.xbrl_status, closes, splits, x.route.sector_adjusted, fx)
+    fallback = None
+    if x.xbrl.concept("shares_outstanding").status != "ok":
+        try:
+            fallback = provider.get_shares_history(x.ticker).series
+        except ProviderError:
+            fallback = None
+    return valuation_recovery(x.xbrl, x.xbrl_status, closes, splits, x.route.sector_adjusted, fx, fallback)
 
 
 def asset_floor_line(af: AssetFloor | None) -> str:

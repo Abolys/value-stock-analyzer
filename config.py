@@ -398,7 +398,7 @@ SCREEN_LOG_DIR = ROOT / "storage" / "logs"
 # --------------------------------------------------------------------------
 # Dashboard, run history and export (Phase 5)
 # --------------------------------------------------------------------------
-APP_VERSION = "0.6.0"  # shown in every export footer
+APP_VERSION = "0.7.0"  # shown in every export footer
 # Headless Chrome for the export PNGs (kaleido). Kept inside the project (gitignored) so the same
 # browser is found whether the app runs from VS Code or a terminal; install it with
 # `python scripts/get_chrome.py`. A BROWSER_PATH environment variable overrides it.

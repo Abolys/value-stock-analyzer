@@ -1,0 +1,5 @@
+# Keep the app on this machine only: holdings, the thesis journal and alerts are personal data.
+# (Without this, Streamlit listens on every network interface.) Change deliberately if you need
+# to reach the app from another device, and put it behind authentication if you do.
+[server]
+address = "localhost"

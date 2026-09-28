@@ -48,7 +48,9 @@ XBRL_TAGS: dict[str, list[tuple[str, str]]] = {
 }
 MATURITY_BUCKETS = {"debt_due_12m": "next 12 months", "debt_due_y2": "year 2", "debt_due_y3": "year 3",
                     "debt_due_y4": "year 4", "debt_due_y5": "year 5", "debt_due_after_y5": "after year 5"}
-XBRL_FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A", "10-KT")
+# Canadian and other foreign issuers listed in the US (MJDS / 40-F filers) furnish their tagged quarterly
+# and annual statements on 6-K, so 6-K facts count too (plain press-release 6-Ks carry no financial facts).
+XBRL_FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A", "10-KT", "6-K", "6-K/A")
 
 
 class Fact(BaseModel):
@@ -96,11 +98,13 @@ def _first_filed(rows: list[dict[str, Any]], unit: str) -> list[Fact]:
 
 
 def parse_company_facts(data: dict[str, Any], currency: str | None = None) -> CompanyFacts:
-    """Pick each canonical concept from the first alias present; money in `currency` when given
-    (else the unit with the most facts), shares in "shares"."""
+    """Pick each canonical concept from the alias with the most recent data (companies switch concepts
+    and even taxonomies over the years, e.g. US GAAP to IFRS), ties going to the earlier alias; money
+    in `currency` when given (else USD, else the unit with the most facts), shares in "shares"."""
     out = CompanyFacts(cik=int(data.get("cik") or 0), entity=data.get("entityName") or "")
     facts = data.get("facts") or {}
     for canonical, aliases in XBRL_TAGS.items():
+        best: Concept | None = None
         for taxonomy, concept in aliases:
             units = (facts.get(taxonomy) or {}).get(concept, {}).get("units") or {}
             if not units:
@@ -115,10 +119,10 @@ def parse_company_facts(data: dict[str, Any], currency: str | None = None) -> Co
             if unit is None:
                 continue
             rows = _first_filed(units[unit], unit)
-            if rows:
-                out.concepts[canonical] = Concept(canonical=canonical, tag=f"{taxonomy}:{concept}", unit=unit,
-                                                  facts=rows)
-                break
+            if rows and (best is None or rows[-1].end > best.facts[-1].end):
+                best = Concept(canonical=canonical, tag=f"{taxonomy}:{concept}", unit=unit, facts=rows)
+        if best is not None:
+            out.concepts[canonical] = best
     return out
 
 
