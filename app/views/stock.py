@@ -21,7 +21,7 @@ from analysis.models import LENSES, AnalysisRun, DevilsAdvocateResult, LensResul
 from analysis.pipeline import FUND_NOTE, run_analysis
 from analysis.turnaround import clock_label
 from analysis.turnaround_models import STATUS_WITHHELD
-from app import charts, services, ui
+from app import auth, charts, services, ui
 from app import stock_view as sv
 from app.charts import ChartOut
 from app.views.raw import raw_data
@@ -383,6 +383,10 @@ def draw_all(lay: Layout, e: Entry, provider) -> None:
 
 
 def llm_notice() -> LLMClient:
+    if not auth.is_owner():  # a shared viewer never spends the owner's API key or Claude subscription
+        st.caption("Viewing read-only: the Moat and Devil's Advocate lenses show cached answers only; a ticker "
+                   "the owner hasn't analysed shows them as not available.")
+        return LLMClient(db_path=config.RUNS_DB_PATH, backend="none")
     llm = LLMClient(db_path=config.RUNS_DB_PATH)
     if llm.backend == "claude_code":
         st.caption("LLM lenses run through the Claude Code CLI on your Claude subscription (no ANTHROPIC_API_KEY "
@@ -443,8 +447,9 @@ def run_progressive(provider, ticker: str, lay: Layout, llm: LLMClient, use_edga
     with lay["header"].container():
         with st.spinner(f"Loading {ticker}: statements, screen metrics, insiders and leadership…"):
             pass
+    # A viewer's analyses aren't stored: they skip the LLM lenses and would muddy the owner's run history.
     run = run_analysis(ctx, ticker, llm=llm, edgar=services.build_edgar(provider) if use_edgar else None,
-                       on_result=on_result)
+                       on_result=on_result, store=auth.is_owner())
     note = stale_cache_note(provider, events_before)
     if run.load_error:
         return Entry(run=run, stale_note=note)
@@ -477,7 +482,7 @@ def render(provider) -> None:
     top = st.columns([4, 2, 1])
     use_edgar = top[1].checkbox("Include SEC EDGAR", value=True, key=f"edgar-{ticker}",
                                 help="Leadership 8-K/6-K and Form 4 insiders")
-    rerun = top[2].button("Re-run analysis", key=f"rerun-{ticker}")
+    rerun = auth.is_owner() and top[2].button("Re-run analysis", key=f"rerun-{ticker}")
     store: dict[str, Entry] = st.session_state.setdefault("analyses", {})
     entry = None if rerun else store.get(ticker)
     if entry is not None and entry.created_at.date() != date.today():
@@ -511,7 +516,7 @@ def portfolio_button(run: AnalysisRun) -> None:
     """"Add to portfolio": the thesis form pre-filled from this analysis (its purchase snapshot). The form
     stays open while st.session_state["add_to_portfolio"] names this ticker (set by the button or by the
     Portfolio page; cleared on save or when the dialog is dismissed)."""
-    if run.load_error or run.analysis_id is None:
+    if run.load_error or run.analysis_id is None or not auth.is_owner():
         return
     st.button("Add to portfolio", key=f"add-pf-{run.ticker}",
               help="Record a buy with its thesis, levels and sell triggers; this analysis is frozen as the "

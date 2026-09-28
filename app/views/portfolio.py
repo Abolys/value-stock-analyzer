@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 import config
-from app import alert_jobs, ui
+from app import alert_jobs, auth, ui
 from app import portfolio_view as pv
 from app.views.thesis_form import trigger_builder
 from portfolio import store
@@ -40,7 +40,7 @@ def check_status() -> None:
                    f"ticker(s), {row.fired} new alert(s), email {row.email_status or 'N/A'}"
                    + (f"; {len(errs)} ticker(s) failed — " + "; ".join(f"{t}: {e}" for t, e in errs.items())
                       if errs else ""))
-    if c2.button("Check alerts now", key="pf-check", disabled=alert_jobs.running(db) is not None):
+    if auth.is_owner() and c2.button("Check alerts now", key="pf-check", disabled=alert_jobs.running(db) is not None):
         try:
             alert_jobs.launch("manual", db_path=db)
             st.rerun()
@@ -85,7 +85,7 @@ def triggers(v: pv.HoldingView) -> None:
         st.caption(f"🟡 near = within {config.TRIGGER_NEAR_BAND:.0%} of the threshold, or the value is N/A / n/m "
                    "(a trigger that can't be evaluated never fires silently).")
     th = v.holding.thesis
-    if th is None:
+    if th is None or not auth.is_owner():
         return
     with st.expander("Edit triggers and levels"):
         rules = trigger_builder(f"pf-rules-{v.holding.holding_id}")
@@ -124,7 +124,7 @@ def reasons(v: pv.HoldingView) -> None:
         return
     for r in th.reasons:
         key = f"pf-reason-{r.reason_id}"
-        st.checkbox(r.text, value=bool(r.still_holds), key=key,
+        st.checkbox(r.text, value=bool(r.still_holds), key=key, disabled=not auth.is_owner(),
                     help="Not reviewed yet" if r.still_holds is None else f"Reviewed {pv.fmt_when(r.reviewed_at)}",
                     on_change=lambda rid=r.reason_id, k=key: store.set_reason(rid, bool(st.session_state[k]),
                                                                              v.holding.holding_id))
@@ -135,6 +135,9 @@ def journal(v: pv.HoldingView) -> None:
     hid = v.holding.holding_id
     st.markdown("**Journal**")
     key = f"pf-journal-{hid}"
+    if not auth.is_owner():
+        _journal_entries(hid)
+        return
     st.text_area("New entry", key=key, label_visibility="collapsed",
                  placeholder="What changed, what you read, what you decided…")
 
@@ -145,6 +148,10 @@ def journal(v: pv.HoldingView) -> None:
             st.session_state[key] = ""
 
     st.button("Add entry", key=f"pf-journal-add-{hid}", on_click=add)
+    _journal_entries(hid)
+
+
+def _journal_entries(hid: int) -> None:
     entries = store.journal(hid)
     if not entries:
         st.caption("No entries yet.")
@@ -159,6 +166,8 @@ def transactions(v: pv.HoldingView) -> None:
     st.dataframe(pd.DataFrame([{"id": t.txn_id, "date": t.txn_date, "side": t.side, "shares": t.shares,
                                 "price": t.price, "fees": t.fees, "note": t.note} for t in h.transactions]),
                  hide_index=True, width="stretch")
+    if not auth.is_owner():
+        return
     with st.form(f"pf-txn-{h.holding_id}", clear_on_submit=True):
         c = st.columns(5)
         side = c[0].selectbox("Side", [BUY, SELL])
@@ -194,7 +203,7 @@ def transactions(v: pv.HoldingView) -> None:
 def kind_toggle(v: pv.HoldingView) -> None:
     h = v.holding
     key = f"pf-cash-{h.holding_id}"
-    st.toggle("Cash deposit", value=h.is_cash, key=key,
+    st.toggle("Cash deposit", value=h.is_cash, key=key, disabled=not auth.is_owner(),
               help="Where cash is parked until an opportunity comes: performance still tracked and totalled apart from "
                    "the value stocks; turning it on removes the analysis snapshot, levels and sell triggers",
               on_change=lambda: store.set_kind(h.holding_id, KIND_CASH if st.session_state[key] else KIND_STOCK))
@@ -206,7 +215,7 @@ def inbox() -> None:
     alerts = store.list_alerts(limit=config.ALERT_INBOX_MAX)
     c1, c2 = st.columns([5, 1])
     c1.caption(f"{unread} unread · each alert fires once per event; newest {config.ALERT_INBOX_MAX} shown")
-    if c2.button("Mark all read", key="pf-read-all", disabled=unread == 0):
+    if auth.is_owner() and c2.button("Mark all read", key="pf-read-all", disabled=unread == 0):
         store.mark_read(None)
         st.rerun()
     if not alerts:
@@ -219,7 +228,7 @@ def inbox() -> None:
                     f"{'**' if new else ''} — {a.message} "
                     f"<span style='color:#898781;font-size:0.8rem'>{pv.fmt_when(a.created_at)} · {a.source}"
                     f"{' · email ' + a.email_status if a.email_status else ''}</span>", unsafe_allow_html=True)
-        if new and c2.button("Read", key=f"pf-read-{a.alert_id}"):
+        if new and auth.is_owner() and c2.button("Read", key=f"pf-read-{a.alert_id}"):
             store.mark_read([a.alert_id])
             st.rerun()
 
@@ -241,6 +250,9 @@ def watchlist_levels() -> None:
                      "fair value (latest analysis)": fv,
                      "suggested buy-below": fv * (1 - config.MIN_MARGIN_OF_SAFETY) if fv else None})
     df = pd.DataFrame(rows)
+    if not auth.is_owner():
+        st.dataframe(df, hide_index=True, width="stretch")
+        return
     edited = st.data_editor(df, hide_index=True, width="stretch", key="pf-watch",
                             disabled=["ticker", "fair value (latest analysis)", "suggested buy-below"],
                             column_config={"buy_below": st.column_config.NumberColumn("Buy-below", min_value=0.0),
@@ -271,6 +283,8 @@ def render(provider) -> None:
     if not holdings:
         st.info("No holdings yet. Open a ticker's Stock page and click **Add to portfolio**: the analysis you are "
                 "looking at is frozen as the purchase snapshot, with your reasons, levels and sell triggers.")
+        if not auth.is_owner():
+            return
         t = st.text_input("Ticker to add", key="pf-add-ticker", placeholder="e.g. LULU")
         if st.button("Open its Stock page", key="pf-add-go") and t.strip():
             st.session_state["add_to_portfolio"] = t.strip().upper()
@@ -301,10 +315,11 @@ def render(provider) -> None:
                 triggers(v)
                 journal(v)
         transactions(v)
-        with st.expander("Add another holding"):
-            t = st.text_input("Ticker", key="pf-add-ticker-2")
-            if st.button("Open its Stock page", key="pf-add-go-2") and t.strip():
-                st.session_state["add_to_portfolio"] = t.strip().upper()
-                ui.open_ticker(t.strip())
+        if auth.is_owner():
+            with st.expander("Add another holding"):
+                t = st.text_input("Ticker", key="pf-add-ticker-2")
+                if st.button("Open its Stock page", key="pf-add-go-2") and t.strip():
+                    st.session_state["add_to_portfolio"] = t.strip().upper()
+                    ui.open_ticker(t.strip())
     inbox()
     watchlist_levels()

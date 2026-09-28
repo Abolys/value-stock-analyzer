@@ -180,6 +180,14 @@ CREATE TABLE IF NOT EXISTS monitor_state (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (ticker, key)
 );
+CREATE TABLE IF NOT EXISTS feedback (
+    feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    name TEXT,
+    page TEXT,
+    text TEXT NOT NULL,
+    read_at TEXT
+);
 CREATE TABLE IF NOT EXISTS alert_checks (
     check_id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at TEXT NOT NULL,

@@ -54,4 +54,14 @@ See "After the build" in `docs/BUILD_PROMPTS.md`: the weekly screen schedule, mo
 - Canadian coverage: after refreshing the universe, run `python scripts/map_sec_ciks.py` so cross-listed TSX names get their SEC history (valuation-based recovery, debt maturities, 6-K leadership check). Review the `auto:` rows it writes to `data/sec_cik_overrides.csv`; add by hand any company it misses because it is named differently on each exchange.
 - Email is off unless `SMTP_HOST` and `ALERT_EMAIL_TO` are set in `.env`. `SMTP_PORT` defaults to 587 (STARTTLS). `SMTP_USER` and `SMTP_PASSWORD` are used when set, and `ALERT_EMAIL_FROM` defaults to `SMTP_USER`. For Gmail, use an app password.
 
+
+### Sharing the app for feedback
+
+`python scripts/share.py` prints a public https link to your running app (a free Cloudflare quick tunnel; the app itself still listens on localhost only). Visitors must sign in:
+
+- **viewer password** (`APP_VIEWER_PASSWORD` in `.env`, generated on first run): give this to your friend. Everything can be browsed, including your portfolio, but nothing is edited or saved, no screen or alert check starts, and the Moat / Devil's Advocate lenses show cached answers only (no calls on your API key or Claude subscription).
+- **owner password** (`APP_OWNER_PASSWORD`): full access from anywhere.
+
+Your friend can leave comments with **💬 Feedback on the app** in the sidebar; you'll find them under **📥 Feedback received**. The link lasts while the script runs (Ctrl-C closes it) and changes each time.
+
 Personal research tool, not investment advice.

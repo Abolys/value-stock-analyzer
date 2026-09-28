@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 import config
-from app import charts, screen_jobs, ui
+from app import auth, charts, screen_jobs, ui
 from app import screener_view as sv
 from app.stock_view import Tag
 from data.universe import list_labels
@@ -61,6 +61,10 @@ def run_progress() -> None:
 
 def list_picker(has_completed: bool) -> None:
     db = config.RUNS_DB_PATH
+    if not auth.is_owner():
+        run_progress()
+        st.caption("Screens are run by the app's owner; you're viewing the latest results.")
+        return
     busy = screen_jobs.active_run(db) is not None
     with st.expander("Run a new screen", expanded=not has_completed or busy):
         rows = sv.list_picker_rows()

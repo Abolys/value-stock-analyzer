@@ -403,6 +403,14 @@ APP_VERSION = "0.7.0"  # shown in every export footer
 # browser is found whether the app runs from VS Code or a terminal; install it with
 # `python scripts/get_chrome.py`. A BROWSER_PATH environment variable overrides it.
 CHROME_DIR = ROOT / ".cache" / "chrome"
+# Sharing the app (scripts/share.py): Cloudflare's quick tunnel gives the local app a public https link.
+CLOUDFLARED_DIR = ROOT / ".cache" / "cloudflared"
+CLOUDFLARED_URL = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+APP_PORT = 8501
+# Headers a proxy or tunnel adds to a forwarded request; their presence marks a remote visitor.
+REMOTE_REQUEST_HEADERS = ("cf-connecting-ip", "x-forwarded-for", "cf-ray")
+FEEDBACK_SHOWN = 30  # feedback entries listed in the owner's sidebar
+FEEDBACK_MAX_CHARS = 5000  # one feedback entry's length cap (longer text is trimmed, not refused)
 UNIVERSE_REFRESH_STATUS_PATH = UNIVERSE_DIR / "refresh_status.json"  # written by scripts/refresh_universe.py
 # A list whose holdings are older than this is marked on the Screener (N-PORT-based Pacer lists lag
 # about 5 months): names acquired or delisted since then show up as "failed to load".
@@ -575,6 +583,13 @@ ALERT_KINDS = {
     "stale": "Fundamentals may be stale",
 }
 ALERT_LOG_DIR = ROOT / "storage" / "logs"
+
+
+def app_passwords() -> dict[str, str]:
+    """Passwords for the shared app (.env, read at call time): APP_OWNER_PASSWORD (full access) and
+    APP_VIEWER_PASSWORD (read-only). Local use needs neither; a request through the share tunnel is
+    refused unless they are set."""
+    return {k: os.getenv(k, "").strip() for k in ("APP_OWNER_PASSWORD", "APP_VIEWER_PASSWORD")}
 
 
 def smtp_settings() -> dict[str, str]:

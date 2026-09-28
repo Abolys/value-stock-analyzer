@@ -17,11 +17,11 @@ if str(ROOT) not in sys.path:
 import streamlit as st  # noqa: E402
 
 import config  # noqa: E402
-from app import alert_jobs, screen_jobs, services, ui  # noqa: E402
+from app import alert_jobs, auth, screen_jobs, services, ui  # noqa: E402
 from app import screener_view  # noqa: E402
 from app.views import accuracy, portfolio, screener, stock  # noqa: E402
 from portfolio import store as pf_store  # noqa: E402
-from storage import llm_store  # noqa: E402
+from storage import feedback, llm_store  # noqa: E402
 
 st.set_page_config(page_title="Value Stock Analyzer", layout="wide")
 
@@ -57,6 +57,44 @@ def sidebar(report) -> None:
         else:
             st.caption(f"Alerts: {unread} unread{checking}")
         st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
+        access_and_feedback()
+
+
+def access_and_feedback() -> None:
+    """Who is signed in (for shared use), the feedback box, and, for the owner, the feedback received."""
+    if auth.is_remote():
+        st.caption("Signed in: " + ("owner (full access)" if auth.is_owner() else
+                                    "viewer (read-only: nothing is saved, no new LLM calls)"))
+        if st.button("Sign out", key="sign-out"):
+            auth.sign_out()
+            st.rerun()
+    with st.expander("💬 Feedback on the app"):
+        key = "feedback-text"
+        st.text_area("What works, what's confusing, what's missing?", key=key)
+        st.text_input("Your name (optional)", key="feedback-name")
+
+        def send() -> None:
+            text = st.session_state.get(key, "")
+            if text.strip():
+                feedback.add(text, st.session_state.get("feedback-name", ""),
+                             page=st.session_state.get("current_page", ""), path=config.RUNS_DB_PATH)
+                st.session_state[key] = ""
+                st.session_state["feedback-sent"] = True
+
+        st.button("Send feedback", key="feedback-send", on_click=send)
+        if st.session_state.pop("feedback-sent", False):
+            st.success("Thanks, sent.")
+    if auth.is_owner():
+        new = feedback.unread(config.RUNS_DB_PATH)
+        items = feedback.latest(path=config.RUNS_DB_PATH)
+        if items:
+            with st.expander(f"📥 Feedback received ({new} new)"):
+                for f in items:
+                    st.markdown(f"{'🆕 ' if f.read_at is None else ''}**{f.name or 'anonymous'}** · "
+                                f"{f.created_at:%Y-%m-%d %H:%M}{' · ' + f.page if f.page else ''}\n\n{f.text}")
+                if new and st.button("Mark all read", key="feedback-read"):
+                    feedback.mark_all_read(config.RUNS_DB_PATH)
+                    st.rerun()
 
 
 def _close_reminder() -> None:
@@ -112,6 +150,7 @@ def start_alert_check() -> None:
 
 
 def main() -> None:
+    auth.gate()  # local use: the owner, no login; through the share link: a password
     provider = _provider()
     report = services.health(provider)
     ui.PAGES.update({
@@ -120,9 +159,11 @@ def main() -> None:
         "portfolio": st.Page(lambda: portfolio.render(provider), title="Portfolio", url_path="portfolio"),
         "accuracy": st.Page(lambda: accuracy.render(provider), title="Estimate accuracy", url_path="accuracy"),
     })
-    start_alert_check()
-    remind_screen()
+    if auth.is_owner():  # a viewer never starts background work
+        start_alert_check()
+        remind_screen()
     page = st.navigation(list(ui.PAGES.values()))
+    st.session_state["current_page"] = page.title
     sidebar(report)
     if st.session_state.pop("goto_stock", False) and page.url_path != "stock":
         st.switch_page(ui.PAGES["stock"])
