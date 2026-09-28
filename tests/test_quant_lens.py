@@ -114,7 +114,7 @@ def test_peak_margin_cyclical_normalised_and_low_confidence():
     # normalised = TTM revenue 1000 × average FCF margin (30% + 5% + 5%) / 3 = 133.3.
     f = make_fundamentals({"total_revenue": (1000, 800, 800), "operating_income": (400, 80, 80),
                            "free_cash_flow": (300, 40, 40), "cost_of_revenue": (500, 400, 400),
-                           "gross_profit": (500, 400, 400)}, years=(T, P, P2))
+                           "gross_profit": (500, 400, 400), "stock_based_compensation": None}, years=(T, P, P2))
     q = quant_lens(make_inputs(f, info=make_info(sector="Basic Materials", industry="Steel")))
     assert q.peak.flagged
     assert q.confidence == config.QUANT_CONFIDENCE_LOW
@@ -147,3 +147,14 @@ def test_bank_with_negative_equity_is_insufficient():
     info = make_info(sector="Financial Services", industry="Banks - Regional")
     q = quant_lens(make_inputs(make_fundamentals({"stockholders_equity": (-100, -50)}), info=info))
     assert not q.ok and "negative equity" in q.status
+
+
+def test_dcf_scores_on_sbc_adjusted_fcf_and_shows_the_raw_value_beside_it():
+    """Stock comp is a real cost: the scored fair value deducts it; the before-SBC value is reference only."""
+    heavy = make_fundamentals({"stock_based_compensation": (60, 50)})  # FCF 160 / 125 in the base fixture
+    light = make_fundamentals({"stock_based_compensation": (0.001, 0.001)})
+    q_heavy, q_light = quant_lens(make_inputs(heavy)), quant_lens(make_inputs(light))
+    assert q_heavy.base.value == pytest.approx((160 - 60 + 125 - 50) / 2)
+    assert q_heavy.dcf.fair_value < q_light.dcf.fair_value
+    assert q_heavy.dcf_before_sbc is not None and q_heavy.dcf_before_sbc.fair_value > q_heavy.dcf.fair_value
+    assert "Fair value before SBC (reference)" in q_heavy.key_figures

@@ -70,8 +70,8 @@ All ratio code goes through one helper that checks denominator signs before divi
 |---|---|---|
 | EBITDA ≤ 0, net debt > 0 | Net debt/EBITDA n/m | Fails the leverage screen; leverage sub-score = 1 |
 | EBITDA ≤ 0, net cash | Net debt/EBITDA n/m | Macro lens scores leverage from cash runway (`RUNWAY_BREAKPOINTS`) instead |
-| EPS ≤ 0 or book value per share ≤ 0 | Graham Number n/m | Margin of safety can't pass; ticker still goes to stage 2 and can pass on other metrics or be analysed manually |
-| DCF growth base | Base = average FCF of the last 3 fiscal years (`DCF_BASE_YEARS`), not one year | If that average ≤ 0, or FCF changed sign within the window: DCF = "Insufficient data - unstable FCF base"; Quant lens uses cash runway |
+| EPS ≤ 0 or book value per share ≤ 0 | Graham Number n/m | Margin of safety is n/m, which counts as available and failing, so the screen status is Fail (manual only). Stage 1 never cuts on it, so the ticker still reaches stage 2 for its full metrics, and it can be analysed manually |
+| DCF growth base | Base = average SBC-adjusted FCF (FCF − stock-based compensation, like the screen's FCF yield) of the last 3 fiscal years (`DCF_BASE_YEARS`), not one year; a year without an SBC row uses raw FCF, labelled | If that average ≤ 0, or it changed sign within the window: DCF = "Insufficient data - unstable FCF base"; Quant lens uses cash runway. The fair value on raw FCF is shown beside it for reference only |
 | Shareholders' equity ≤ 0 | ROE, price to book, P/TBV n/m | Stated in the rationale; banks with negative equity get "Insufficient data" on sector-adjusted metrics |
 | Invested capital ≤ 0 | ROIC n/m | Use return on total assets vs `COST_OF_CAPITAL` instead, labelled as the substitute |
 | EBIT ≤ 0 | Interest coverage sub-score = 1 | Regardless of interest expense; "no interest expense → 10" applies only when EBIT > 0 |

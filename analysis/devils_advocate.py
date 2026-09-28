@@ -24,7 +24,7 @@ from data.values import Datum, nm
 from llm import prompts
 from llm.client import LLMClient, evidence_problems
 from llm.schemas import DevilsAdvocateResponse
-from screening.metrics import cash_runway, ttm_fcf
+from screening.metrics import cash_runway, fleet_runway_caveat, ttm_fcf
 from signals.mapping import MappingStep
 from signals.valuation import liquid_cash
 
@@ -139,7 +139,7 @@ def build_da_payload(x: AnalysisInputs, quant: QuantResult | None, macro: MacroR
     else:
         upside = q.status if q is not None and not q.ok else ("N/A - " + (q.method if q else "Quant did not run"))
         fair = upside
-    method = {"dcf": "two-stage DCF on the average FCF of the last fiscal years",
+    method = {"dcf": "two-stage DCF on the average SBC-adjusted FCF of the last fiscal years",
               "runway": "cash runway (DCF skipped: FCF-negative or unstable FCF base)",
               "excess_return": "excess-return shortcut: fair P/B = ROE / cost of capital",
               "reit_ffo_dcf": "two-stage DCF on TTM FFO"}.get(q.method if q else "", "N/A")
@@ -224,6 +224,8 @@ def build_da_payload(x: AnalysisInputs, quant: QuantResult | None, macro: MacroR
     }
     if s.stale:
         payload["stale_detail"] = s.stale_label
+    if runway.ok and (caveat := fleet_runway_caveat(x.route.industry)):
+        payload["cash_runway_caveat"] = caveat
     return payload
 
 

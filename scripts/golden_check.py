@@ -213,6 +213,10 @@ def _htz(r):
                                                              >= "2021-07-01") for e in tr.episodes), \
         "a drawdown episode crosses the HTZ break"
     assert any(b.date.isoformat() == "2021-07-01" for b in tr.breaks), "turnaround did not load the HTZ break"
+    a = r["analysis"]
+    assert a.quant.method == "runway" and any(config.FLEET_RUNWAY_CAVEAT in n for n in a.quant.notes), \
+        "HTZ runway should carry the fleet-capex caveat"
+    assert "cash_runway_caveat" in a.devils_advocate.payload, "fleet caveat missing from the DA payload"
     lead = r["analysis"].devils_advocate.payload["leadership"]
     assert LAYER_8K in lead["coverage"], f"DA payload leadership coverage {lead}"
     dd = r["charts"]["drawdown"]

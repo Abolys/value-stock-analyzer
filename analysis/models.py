@@ -70,6 +70,7 @@ class QuantResult(LensResult):
     method: str = ""  # dcf | runway | excess_return | reit_ffo_dcf
     dcf: DcfResult | None = None  # the DCF the score uses (normalised when peak earnings are flagged)
     dcf_raw: DcfResult | None = None  # the unnormalised DCF, shown beside it when normalised
+    dcf_before_sbc: DcfResult | None = None  # the same DCF on raw FCF (stock comp treated as free), for reference
     base: DcfBase | None = None
     growth: GrowthInput | None = None
     reverse_dcf: ReverseDcf | None = None

@@ -42,7 +42,8 @@ def run_header(shown: store.ScreenRun, latest: store.ScreenRun | None, results) 
                        + ", ".join(shown.flagged_fields))
         if failed:
             with st.expander(f"Failed to load ({len(failed)})"):
-                st.dataframe(pd.DataFrame([{"ticker": r.ticker, "reason": r.load_error} for r in failed]),
+                st.dataframe(pd.DataFrame([{"ticker": r.ticker, "reason": r.load_error,
+                                            "likely cause": sv.load_failure_hint(r.load_error)} for r in failed]),
                              hide_index=True, width="stretch")
 
 
@@ -66,7 +67,8 @@ def list_picker(has_completed: bool) -> None:
         cols = st.columns(min(4, len(rows)) or 1)
         chosen = []
         for i, row in enumerate(rows):
-            label = f"{row['label']} ({row['count']:,}) · as of {row['as_of']}" + (" · ⚠ stale" if row["stale"] else "")
+            label = (f"{row['label']} ({row['count']:,}) · as of {row['as_of']}" + (" · ⚠ stale" if row["stale"] else "")
+                     + (f" · ⚠ {row['age_days']} days old" if row["aged"] else ""))
             with cols[i % len(cols)]:
                 if st.checkbox(label, value=row["key"] == "cowz", key=f"list-{row['key']}",
                                help=row["stale_note"] or None):

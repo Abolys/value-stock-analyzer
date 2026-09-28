@@ -85,3 +85,34 @@ def test_banner_on_failed_health_check(tmp_path, monkeypatch):
     err = " ".join(e.value for e in at.error)
     assert "Data source not responding correctly" in err and "SPY: statements empty" in err
     assert "upgrade_yfinance.py" in err and "shown, each with its age" in err
+
+
+def _stock_page(provider):
+    import streamlit as st
+
+    from app.views import stock
+
+    st.session_state.setdefault("ticker", "LULU")
+    stock.render(provider)
+
+
+def test_session_analysis_from_an_earlier_day_is_refreshed(tmp_path, monkeypatch):
+    from datetime import timedelta
+
+    from app import services
+
+    provider = CachedProvider(fixture_provider(), DiskCache(tmp_path / "cache.db"))
+    monkeypatch.setattr(services, "build_edgar", lambda p: fixture_edgar())
+    monkeypatch.setattr(services, "valet_fetch", lambda: None)
+    at = AppTest.from_function(_stock_page, args=(provider,), default_timeout=180)
+    at.run()
+    assert not at.exception
+    at.run()  # same day: the session's analysis is reused and says when it ran
+    assert any("Analysed at" in c.value for c in at.caption)
+    assert not any("refreshing it" in i.value for i in at.info)
+    entry = at.session_state["analyses"]["LULU"]
+    entry.created_at -= timedelta(days=1)  # the tab was left open overnight
+    at.run()
+    assert not at.exception
+    assert any("refreshing it" in i.value for i in at.info)
+    assert at.session_state["analyses"]["LULU"].created_at.date() == datetime.now().date()

@@ -171,3 +171,20 @@ def test_scatter_marks_pass_line_status_shapes_and_label_headroom():
     assert any(s.type == "line" and s.x0 == config.MIN_MARGIN_OF_SAFETY for s in out.fig.layout.shapes)
     assert out.fig.layout.yaxis.range[1] > 10  # a label on a 10.0 point stays inside the plot
     assert "● Pass · ○ Incomplete · ✕ Fail" in out.caption
+
+
+def test_old_universe_lists_are_marked_and_load_failures_hinted():
+    from datetime import date
+
+    import config
+
+    assert sv.holdings_age_days({"2026-04-30"}, date(2026, 9, 27)) == 150
+    assert sv.holdings_age_days({"2026Q2"}, date(2026, 9, 27)) is None  # quarter labels: no age claimed
+    rows = {r["key"]: r for r in sv.list_picker_rows(today=date(2026, 9, 27))}
+    cowz = rows["cowz"]
+    if cowz["count"] and cowz["age_days"] is not None:
+        assert cowz["aged"] == (cowz["age_days"] > config.UNIVERSE_AS_OF_WARN_DAYS)
+        if cowz["aged"]:
+            assert "failed to load" in cowz["stale_note"]
+    assert sv.load_failure_hint("info: yfinance returned no info for CTRA") == sv.NO_INFO_HINT
+    assert sv.load_failure_hint("statements: timeout") == ""

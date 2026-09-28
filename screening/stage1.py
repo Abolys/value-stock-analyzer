@@ -40,6 +40,8 @@ def stage1(info_values: dict[str, Datum], price: Datum, rf: Datum, route: Sector
             runway = mx.cash_runway(v["info_total_cash"], fcf)
             res.metrics.append(mx.runway_metric(runway, v["info_total_cash"], fcf, slack,
                                                 label="Estimated cash runway (stage 1, info totalCash)"))
+            if caveat := mx.fleet_runway_caveat(route.industry):
+                res.metrics[-1].notes.append(caveat)
         else:
             res.metrics.append(mx.fcf_yield(fcf, None, mcap, rf, slack))
         res.metrics.append(mx.leverage_metric(v["info_total_debt"], v["info_total_cash"], v["info_ebitda"], slack))

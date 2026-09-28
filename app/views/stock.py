@@ -10,11 +10,11 @@ Advocate last), then the aggregate and the turnaround.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 import config
 from analysis.models import LENSES, AnalysisRun, DevilsAdvocateResult, LensResult, LLMLensResult, MoatResult, QuantResult
@@ -62,6 +62,7 @@ class Entry(BaseModel):
     bundle: sv.PriceBundle | None = None
     charts: dict[str, ChartOut | None] = {}
     stale_note: str = ""  # data served from cache because the live source failed, with its age
+    created_at: datetime = Field(default_factory=datetime.now)  # when this session ran the analysis
 
 
 class Layout:
@@ -460,6 +461,11 @@ def render(provider) -> None:
     rerun = top[2].button("Re-run analysis", key=f"rerun-{ticker}")
     store: dict[str, Entry] = st.session_state.setdefault("analyses", {})
     entry = None if rerun else store.get(ticker)
+    if entry is not None and entry.created_at.date() != date.today():
+        # A tab left open overnight: yesterday's prices and signals. Re-run (unchanged LLM answers come
+        # from the response cache, so this costs no new calls unless something material moved).
+        st.info(f"The analysis kept in this session was from {entry.created_at:%Y-%m-%d %H:%M}; refreshing it.")
+        entry = None
     if entry is not None and entry.run.load_error:
         show_load_error(ticker, entry.run.load_error)
         if entry.stale_note:
@@ -472,6 +478,7 @@ def render(provider) -> None:
         draw_all(lay, entry, provider)
         for err in entry.run.errors:
             st.error(f"Lens error: {err}")
+        top[0].caption(f"Analysed at {entry.created_at:%H:%M} this session · Re-run for the latest data")
     else:
         entry = run_progressive(provider, ticker, lay, llm, use_edgar)
         store[ticker] = entry

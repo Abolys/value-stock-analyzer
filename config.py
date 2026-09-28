@@ -70,6 +70,12 @@ MAX_NET_DEBT_EBITDA = 3.0
 MAX_SHARE_GROWTH_PER_YEAR = 0.0
 DILUTION_FLAG_PER_YEAR = 0.03
 MIN_CASH_RUNWAY_MONTHS = 24
+# Industries whose fleet purchases (vehicles, equipment for rent) are capex financed by asset-backed
+# debt, so FCF-based cash runway understates liquidity. Matched by prefix on the yfinance industry;
+# the runway is kept but labelled with FLEET_RUNWAY_CAVEAT (no score change).
+FLEET_CAPEX_INDUSTRIES = ["Rental & Leasing Services"]
+FLEET_RUNWAY_CAVEAT = ("fleet capex is largely financed by vehicle/equipment debt, so FCF-based cash runway "
+                       "understates liquidity; read it as a stress figure, not months to insolvency")
 STAGE1_SLACK = 0.25  # loosens the hurdle each stage-1 metric is compared against
 STAGE_DIVERGENCE = 0.30
 SCATTER_LABEL_TOP_N = 10
@@ -395,6 +401,9 @@ APP_VERSION = "0.6.0"  # shown in every export footer
 # `python scripts/get_chrome.py`. A BROWSER_PATH environment variable overrides it.
 CHROME_DIR = ROOT / ".cache" / "chrome"
 UNIVERSE_REFRESH_STATUS_PATH = UNIVERSE_DIR / "refresh_status.json"  # written by scripts/refresh_universe.py
+# A list whose holdings are older than this is marked on the Screener (N-PORT-based Pacer lists lag
+# about 5 months): names acquired or delisted since then show up as "failed to load".
+UNIVERSE_AS_OF_WARN_DAYS = 120
 SCREEN_ETA_MIN_DONE = 5  # tickers finished before the Screener shows an estimated time left
 CHANGES_LIST_MAX = 8  # tickers named per "Changes since last screen" card before "+n more"
 # Sensitivity heatmap: a fair value within ±5% of the actual latest price is shaded neutral grey;

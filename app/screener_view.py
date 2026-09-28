@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -364,16 +364,42 @@ def refresh_status() -> dict[str, dict[str, Any]]:
         return {}
 
 
-def list_picker_rows() -> list[dict[str, Any]]:
+def holdings_age_days(as_of_values, today: date | None = None) -> int | None:
+    """Days since the newest parseable as_of date of a list (None when none parse, e.g. quarter labels)."""
+    dates = []
+    for v in as_of_values:
+        try:
+            dates.append(date.fromisoformat(str(v)[:10]))
+        except ValueError:
+            continue
+    return ((today or date.today()) - max(dates)).days if dates else None
+
+
+def list_picker_rows(today: date | None = None) -> list[dict[str, Any]]:
     status = refresh_status()
     rows = []
     for key, label in list_labels().items():
         df = load_list(key)
         st = status.get(key, {})
+        age = holdings_age_days(set(df["as_of"]), today) if len(df) else None
+        aged = age is not None and age > config.UNIVERSE_AS_OF_WARN_DAYS
+        note = st.get("message", "")
+        if aged:
+            note = (f"holdings as of {age} days ago; companies acquired or delisted since then will show as "
+                    f"'failed to load'. " + note).strip()
         rows.append({"key": key, "label": label, "count": len(df),
                      "as_of": ", ".join(sorted(set(df["as_of"]))) if len(df) else "empty",
-                     "stale": st.get("status") == "stale", "stale_note": st.get("message", "")})
+                     "stale": st.get("status") == "stale", "aged": aged, "age_days": age, "stale_note": note})
     return rows
+
+
+NO_INFO_HINT = "likely acquired or delisted since its list's holdings date"
+
+
+def load_failure_hint(error: str) -> str:
+    """A reading of a load failure for the table: yfinance's "no info" for a listed name usually means
+    the company no longer trades under that symbol (the ETF-based lists lag)."""
+    return NO_INFO_HINT if "returned no info" in error or "No data found" in error else ""
 
 
 def fail_display(status: str) -> str:

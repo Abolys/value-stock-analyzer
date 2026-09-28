@@ -136,6 +136,8 @@ def evaluate(ticker: str, info: InfoResult, info_values: dict[str, Datum], route
         if fcf_test.status == mx.FCF_NEGATIVE and not runway.is_nm:
             fcf_m = mx.runway_metric(runway, cash, fcf)
             fcf_m.notes.append(f"structurally FCF-negative ({fcf_test.detail}): cash runway replaces FCF yield")
+            if caveat := mx.fleet_runway_caveat(route.industry):
+                fcf_m.notes.append(caveat)
         else:
             fcf_m = mx.fcf_yield(fcf, sbc, mcap, rf)
             if fcf_test.status == mx.FCF_NEGATIVE:

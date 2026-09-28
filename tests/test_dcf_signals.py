@@ -87,14 +87,22 @@ def test_growth_is_clamped(revs, expected):
     assert "clamped" in g.detail
 
 
-def test_dcf_base_is_average_of_last_three_fiscal_years():
-    f = make_fundamentals({"free_cash_flow": (300, 200, 100, 50)}, years=(T, P, P2, P3))
+def test_dcf_base_is_average_sbc_adjusted_fcf_of_last_three_fiscal_years():
+    f = make_fundamentals({"free_cash_flow": (300, 200, 100, 50), "stock_based_compensation": (30, 20, 10, 5)},
+                          years=(T, P, P2, P3))
     b = dcf.dcf_base(f)
-    assert b.ok and b.value == pytest.approx(200.0)  # (300 + 200 + 100) / 3; the 4th year is ignored
-    assert len(b.years) == config.DCF_BASE_YEARS
+    # (300 − 30 + 200 − 20 + 100 − 10) / 3; the 4th year is ignored
+    assert b.ok and b.value == pytest.approx(180.0) and b.raw_value == pytest.approx(200.0)
+    assert len(b.years) == config.DCF_BASE_YEARS and "SBC deducted in every year" in b.detail
 
 
-@pytest.mark.parametrize("fcf,why", [((100, -50, 80), "changed sign"), ((-10, -20, -30), "average FCF ≤ 0")])
+def test_dcf_base_uses_raw_fcf_where_sbc_is_not_reported():
+    b = dcf.dcf_base(make_fundamentals({"free_cash_flow": (300, 200, 100), "stock_based_compensation": None},
+                                       years=(T, P, P2)))
+    assert b.value == pytest.approx(200.0) and "SBC not reported" in b.sbc_note
+
+
+@pytest.mark.parametrize("fcf,why", [((100, -50, 80), "changed sign"), ((-10, -20, -30), "FCF ≤ 0")])
 def test_unstable_fcf_base(fcf, why):
     b = dcf.dcf_base(make_fundamentals({"free_cash_flow": fcf}, years=(T, P, P2)))
     assert b.status == "Insufficient data - unstable FCF base" and why in b.detail
@@ -109,7 +117,7 @@ def test_peak_margin_cyclical_flagged_and_normalised():
     # Operating margins 40%, 10%, 10% → average 20%; TTM (latest year) 40% ≥ 1.5 × 20% → flagged.
     # FCF margins 30%, 5%, 5% → average 13.33%; normalised base = 1000 × 13.33% = 133.3.
     f = make_fundamentals({"total_revenue": (1000, 1000, 1000), "operating_income": (400, 100, 100),
-                           "free_cash_flow": (300, 50, 50)}, years=(T, P, P2))
+                           "free_cash_flow": (300, 50, 50), "stock_based_compensation": None}, years=(T, P, P2))
     pk = dcf.peak_earnings(f, config.CYCLICALITY_SCORES["cyclical"])
     assert pk.flagged and pk.average_margin == pytest.approx(0.2)
     assert pk.normalised_base == pytest.approx(1000 * (0.3 + 0.05 + 0.05) / 3)

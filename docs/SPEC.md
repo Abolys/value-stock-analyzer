@@ -12,7 +12,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `TERMINAL_GROWTH` | 0.025 | DCF terminal stage |
 | `STAGE1_GROWTH_CAP` / `STAGE1_GROWTH_FLOOR` | 0.15 / -0.05 | Clamp on the DCF stage-1 growth rate, which is the revenue CAGR over the available fiscal years (not FCF growth, which is too noisy over ~4 years) |
 | `DCF_STAGE1_YEARS` | 5 | DCF explicit stage |
-| `DCF_BASE_YEARS` | 3 | DCF starting FCF = average of this many fiscal years (see Rule 2b) |
+| `DCF_BASE_YEARS` | 3 | DCF starting FCF = average SBC-adjusted FCF (FCF − stock-based compensation) of this many fiscal years (see Rule 2b); the raw-FCF fair value is shown for reference. The peak-earnings normalisation uses the same SBC-adjusted FCF margin |
 | `FCF_NEGATIVE_RULE` | negative FCF in a majority of the available fiscal years (up to the last 4), with at least 2 years required | Defines "structurally FCF-negative". Fewer than 2 years (recent IPOs, spin-offs) → "Insufficient data - too little history" |
 | Cash runway (definition) | (cash + cash equivalents + short-term investments) ÷ monthly burn, where burn = −TTM raw FCF (not SBC-adjusted, since stock comp isn't cash out) | Used wherever the plan says "cash runway". Burn ≤ 0 → runway n/m "not burning cash" |
 | `MIN_MARGIN_OF_SAFETY` | 0.20 | Graham Number at least 20% above price to pass |
@@ -23,6 +23,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `MAX_SHARE_GROWTH_PER_YEAR` | 0.0 | Pass if share count flat or shrinking |
 | `DILUTION_FLAG_PER_YEAR` | 0.03 | Flag dilution above 3%/yr |
 | `MIN_CASH_RUNWAY_MONTHS` | 24 | FCF-negative names |
+| `FLEET_CAPEX_INDUSTRIES` / `FLEET_RUNWAY_CAVEAT` | Rental & Leasing Services / text | Industries (yfinance, by prefix) whose fleet purchases are debt-financed capex: cash runway is kept but labelled with the caveat in the screen, the Quant lens and the Devil's Advocate payload; scores unchanged |
 | `LENS_WEIGHTS` | 0.25 each | Aggregate verdict (weighted mean of available lenses) |
 | `CONTROVERSY_GAP` | 3.0 | Flag "high controversy" when Devil's Advocate is ≥3 points below the mean of the other three |
 | `DRAWDOWN_THRESHOLD` | 0.25 | Drawdown episode = ≥25% below rolling 52-week high |
@@ -86,6 +87,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `SCREEN_PROGRESS_POLL_SECONDS` | 5 | Screener page progress refresh |
 | `SCREEN_REMIND_DAYS` | 7 | On app start, ask whether to run a new screen when the last completed one is older than this (or none has completed); offers Resume instead when the latest run was interrupted, and stays quiet while one is running |
 | `SCREEN_ETA_MIN_DONE` | 5 | Tickers finished before the Screener shows an estimated time left |
+| `UNIVERSE_AS_OF_WARN_DAYS` | 120 | A universe list whose holdings date is older than this is marked on the Screener; its load failures are hinted as likely acquired or delisted since that date |
 | `CHANGES_LIST_MAX` | 8 | Tickers named per "Changes since last screen" card before "+n more" |
 | `HEATMAP_NEUTRAL_BAND` | 0.05 | Sensitivity heatmap: fair values within ±5% of the actual latest price are shaded neutral grey |
 | `INSIDER_MARKER_SIZE_RANGE` | 8–22 px | Insider markers on the price panel, scaled by trade value |

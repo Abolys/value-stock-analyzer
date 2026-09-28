@@ -155,6 +155,13 @@ def cash_runway(cash: Datum, fcf_raw: Datum) -> Datum:
                       num_name="cash + short-term investments", den_name="monthly burn")
 
 
+def fleet_runway_caveat(industry: str | None) -> str:
+    """The FLEET_RUNWAY_CAVEAT for fleet-capex industries (rental and leasing), else ""."""
+    if industry and any(industry.startswith(p) for p in config.FLEET_CAPEX_INDUSTRIES):
+        return f"{industry}: {config.FLEET_RUNWAY_CAVEAT}"
+    return ""
+
+
 def runway_metric(runway: Datum, cash: Datum, fcf_raw: Datum, slack: float = 0.0,
                   label: str = "Cash runway (FCF-negative)") -> MetricResult:
     hurdle = config.MIN_CASH_RUNWAY_MONTHS * (1 - slack)

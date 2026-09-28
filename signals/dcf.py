@@ -5,7 +5,9 @@ One function, `dcf_value`, computes fair value per share. The base case, the
 reverse DCF and every cell of the sensitivity grid call it, so they can never
 disagree on structure or assumptions.
 
-- Base FCF = average of the last DCF_BASE_YEARS fiscal years (Rule 2b). An
+- Base FCF = average SBC-adjusted FCF (FCF − stock-based compensation, like the screen's
+  FCF yield) of the last DCF_BASE_YEARS fiscal years (Rule 2b); a year whose SBC isn't
+  reported uses raw FCF, labelled. The raw-FCF base is kept for a "before SBC" fair value. An
   average ≤ 0, or a sign change inside the window → "Insufficient data -
   unstable FCF base"; fewer than FCF_NEGATIVE_MIN_YEARS years → "too little
   history".
@@ -42,15 +44,37 @@ class DcfBase(BaseModel):
     years: list[Datum] = Field(default_factory=list)
     detail: str = ""
     normalised: bool = False
+    raw_value: float | None = None  # the same average on raw FCF (before stock-based compensation)
+    sbc_note: str = ""  # which years lacked an SBC row, if any
 
     @property
     def ok(self) -> bool:
         return self.status == "ok" and self.value is not None
 
 
+def sbc_adjusted_fcf(f: Fundamentals) -> tuple[list[Datum], list[str]]:
+    """Annual FCF − stock-based compensation per fiscal year, newest first (stock comp is a real cost
+    paid in shares). Years without an SBC row keep raw FCF; their labels are returned."""
+    out, missing = [], []
+    for d in annual_fcf(f):
+        sbc = f.fy("stock_based_compensation", d.period_end)
+        if sbc.ok:
+            out.append(d.model_copy(update={"value": d.value - sbc.value,
+                                            "notes": [*d.notes, f"SBC {sbc.value:,.4g} deducted"]}))
+        else:
+            out.append(d.model_copy(update={"notes": [*d.notes, "SBC not reported; raw FCF"]}))
+            missing.append(d.period_label)
+    return out, missing
+
+
 def dcf_base(f: Fundamentals) -> DcfBase:
-    """Average FCF over the last DCF_BASE_YEARS fiscal years, with the Rule 2b stability checks."""
-    years = annual_fcf(f)[: config.DCF_BASE_YEARS]
+    """Average SBC-adjusted FCF over the last DCF_BASE_YEARS fiscal years, with the Rule 2b stability checks."""
+    raw_years = annual_fcf(f)[: config.DCF_BASE_YEARS]
+    adj, missing = sbc_adjusted_fcf(f)
+    years = adj[: config.DCF_BASE_YEARS]
+    missing = [m for m in missing if m in {d.period_label for d in years}]
+    sbc_note = (f"SBC not reported for {', '.join(missing)} (raw FCF used there)" if missing
+                else "SBC deducted in every year")
     labels = ", ".join(f"{d.period_label} {d.value:,.4g}" for d in years)
     if len(years) < config.FCF_NEGATIVE_MIN_YEARS:
         return DcfBase(status=TOO_LITTLE_HISTORY, years=years,
@@ -58,12 +82,15 @@ def dcf_base(f: Fundamentals) -> DcfBase:
     avg = sum(d.value for d in years) / len(years)
     signs = {d.value > 0 for d in years if d.value != 0}
     short = "" if len(years) == config.DCF_BASE_YEARS else f"; only {len(years)} of {config.DCF_BASE_YEARS} years available"
-    detail = f"average of {len(years)} fiscal years ({labels}) = {avg:,.4g}{short}"
+    detail = f"average SBC-adjusted FCF of {len(years)} fiscal years ({labels}) = {avg:,.4g}{short}; {sbc_note}"
+    raw_avg = sum(d.value for d in raw_years) / len(raw_years) if raw_years else None
     if len(signs) > 1:
-        return DcfBase(status=UNSTABLE_BASE, years=years, detail=f"FCF changed sign within the window ({labels})")
+        return DcfBase(status=UNSTABLE_BASE, years=years, raw_value=raw_avg, sbc_note=sbc_note,
+                       detail=f"SBC-adjusted FCF changed sign within the window ({labels})")
     if avg <= 0:
-        return DcfBase(status=UNSTABLE_BASE, years=years, detail=f"average FCF ≤ 0 ({detail})")
-    return DcfBase(value=avg, years=years, detail=detail)
+        return DcfBase(status=UNSTABLE_BASE, years=years, raw_value=raw_avg, sbc_note=sbc_note,
+                       detail=f"average SBC-adjusted FCF ≤ 0 ({detail})")
+    return DcfBase(value=avg, years=years, detail=detail, raw_value=raw_avg, sbc_note=sbc_note)
 
 
 class GrowthInput(BaseModel):
@@ -289,8 +316,8 @@ def _margins(f: Fundamentals, num_field: str) -> list[float]:
     for rev in f.annual_values("total_revenue"):
         if not rev.ok or rev.value <= 0:
             continue
-        if num_field == "free_cash_flow":
-            num = next((d for d in annual_fcf(f) if d.period_end == rev.period_end), None)
+        if num_field == "free_cash_flow":  # SBC-adjusted, like the DCF base it normalises
+            num = next((d for d in sbc_adjusted_fcf(f)[0] if d.period_end == rev.period_end), None)
         else:
             num = f.fy(num_field, rev.period_end)
         if num is not None and num.ok:
@@ -322,7 +349,7 @@ def peak_earnings(f: Fundamentals, cyclicality_score: float) -> PeakEarnings:
             res.average_fcf_margin = sum(fcf_margins) / len(fcf_margins)
             res.normalised_base = rev.value * res.average_fcf_margin
             res.detail += (f"; possibly peak earnings — DCF base normalised to TTM revenue {rev.value:,.4g} × "
-                           f"average FCF margin {res.average_fcf_margin:.1%} = {res.normalised_base:,.4g}")
+                           f"average SBC-adjusted FCF margin {res.average_fcf_margin:.1%} = {res.normalised_base:,.4g}")
         else:
             res.detail += "; possibly peak earnings — FCF margins unavailable, base not normalised"
     return res

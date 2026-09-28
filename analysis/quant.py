@@ -30,7 +30,9 @@ from analysis.fmt import d_pct, money, pct
 from analysis.inputs import AnalysisInputs
 from analysis.models import OK, QuantResult, insufficient
 from data.values import Datum, nm
-from screening.metrics import FCF_NEGATIVE, TOO_LITTLE_HISTORY, annual_fcf, cash_runway, fcf_negative_test, ttm_fcf
+from screening.metrics import (
+    FCF_NEGATIVE, TOO_LITTLE_HISTORY, annual_fcf, cash_runway, fcf_negative_test, fleet_runway_caveat, ttm_fcf,
+)
 from signals import dcf
 from signals.mapping import MappingStep, _clamp, mapped, mapping_line
 from signals.returns import ffo, roe, roic
@@ -141,6 +143,9 @@ def _runway_path(res: QuantResult, x: AnalysisInputs, why: str) -> QuantResult:
     res.runway_months = runway
     res.key_figures["Cash runway"] = f"{runway.value:.0f} months" if runway.ok else runway.status
     res.notes.append(f"{why}: cash runway replaces the DCF; no ROIC adjustment")
+    if caveat := fleet_runway_caveat(x.route.industry):
+        res.key_figures["Cash runway"] += " (fleet business: stress figure, see note)"
+        res.notes.append(caveat)
     if not runway.ok:
         res.status = insufficient(f"{why}; cash runway {runway.status}")
         return _finish(res, x)
@@ -199,6 +204,13 @@ def _dcf_path(res: QuantResult, x: AnalysisInputs, base: dcf.DcfBase, method: st
     })
     if res.dcf_raw is not None and res.dcf_raw.ok:
         res.key_figures["Fair value (raw, unnormalised)"] = money(res.dcf_raw.fair_value, x.info.get("currency"))
+    if (method == METHOD_DCF and inputs is not None and base.raw_value and base.raw_value > 0
+            and abs(base.raw_value - base.value) > config.RATIO_COMPARE_TOLERANCE * abs(base.value)):
+        res.dcf_before_sbc = dcf.run_dcf(inputs.model_copy(update={"base": base.raw_value}))
+        if res.dcf_before_sbc.ok:
+            res.key_figures["Fair value before SBC (reference)"] = (
+                f"{money(res.dcf_before_sbc.fair_value, x.info.get('currency'))} — raw FCF, stock comp treated as "
+                f"free; the score uses the SBC-adjusted value")
     label = "DCF upside" + (" (normalised)" if res.dcf_raw is not None else "")
     res.mapping_steps = [
         mapped(label, scored.upside, config.QUANT_UPSIDE_BREAKPOINTS, pct(scored.upside, digits=0)),
