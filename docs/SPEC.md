@@ -45,6 +45,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `WILLIAMS_R_PERIOD` / `WILLIAMS_R_OVERSOLD` / `WILLIAMS_R_LOOKBACK_DAYS` | 14 / −80 / 5 | Williams %R rising out of oversold: ≤ −80 within the last 5 days, above it now. Uses daily highs and lows scaled onto the adjusted closes; falls back to close-based (labelled) when a provider has no highs and lows |
 | `DOUBLE_BOTTOM_WINDOW_DAYS` / `_PIVOT_DAYS` / `_TOLERANCE` / `_MIN_SEPARATION_DAYS` / `_MIN_BOUNCE` | 120 / 5 / 3% / 20 / 10% | Forming double bottom: two pivot lows within 3% of each other, ≥ 20 trading days apart, a neckline ≥ 10% above them, price now between the second low and the neckline |
 | `VALUATION_RECOVERY_YEARS` | 5 | Valuation-based recovery: time for a ratio to return to its own 5-year median (needs FMP) |
+| `BUYBACK_CATALYST_MIN_YIELD` | 0.02 | Turnaround catalysts: TTM share repurchases (net of issuance shown alongside) listed when they reach 2% of market cap; with the next earnings date, leadership events, the ex-dividend date and the 90-day analyst-estimate revision direction. Context only, never scored |
 | `LEADERSHIP_LOOKBACK_MONTHS` | 24 | Window for CEO/CFO departure flag |
 | `LEADERSHIP_KEYWORDS` | `role`, `departure` and `near_role` groups (see Data sources) | 6-K keyword pre-filter before the LLM check, applied by proximity (`LEADERSHIP_KEYWORD_WINDOW_WORDS`) |
 | `LEADERSHIP_HIGH_COUNT` | 2 | Departures in the window that make the flag "high" (1 = "flagged") |

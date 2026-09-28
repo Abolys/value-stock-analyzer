@@ -627,3 +627,25 @@ def test_abx_to_is_classified_against_the_saved_tsx_index(fx_provider, db_path):
         [e.classification_note for e in r.episodes]
     assert {e.episode_type for e in r.episodes} == {COMPANY_SPECIFIC, MARKET_DRIVEN}
     assert not any("unclassified" in n for n in r.notes)
+
+
+def test_data_catalysts_buyback_dividend_and_revisions():
+    from analysis.turnaround import data_catalysts
+    from tests.analysis_helpers import make_inputs
+    from tests.screen_helpers import make_fundamentals, make_info
+
+    import pandas as pd
+    # price 10 × 100 shares = market cap 1,000; repurchases 50 = 5% (≥ BUYBACK_CATALYST_MIN_YIELD), issuance 10
+    f = make_fundamentals({"repurchase_of_stock": (-50, -40), "issuance_of_stock": (10, 5), "dividends_paid": (-20, -18)})
+    ex = int(pd.Timestamp("2026-03-02").timestamp())
+    info = make_info(ex_dividend_date=ex)
+    divs = pd.Series([0.1, 0.1], index=pd.to_datetime(["2025-06-01", "2025-12-01"]))
+    x = make_inputs(f, info=info, dividends=divs)
+    cats = {c.kind: c for c in data_catalysts(x)}
+    assert "5.0% of market cap" in cats["buyback"].text and "net of issuance 4.0%" in cats["buyback"].text
+    assert cats["dividend"].date.isoformat() == "2026-03-02"  # after TODAY (2026-02-15): upcoming
+    assert cats["estimates"].text.startswith("Analyst estimate revisions: N/A")  # no estimates: N/A, not dropped
+    small = make_inputs(make_fundamentals({"repurchase_of_stock": (-5, -4)}))
+    assert "buyback" not in {c.kind for c in data_catalysts(small)}  # 0.5%: below the catalyst threshold
+    missing = make_inputs(make_fundamentals({"repurchase_of_stock": None}))
+    assert next(c for c in data_catalysts(missing) if c.kind == "buyback").text.startswith("Buybacks: N/A")

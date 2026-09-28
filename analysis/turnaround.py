@@ -34,6 +34,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
+from analysis.fmt import human
 from analysis.models import AnalysisRun, insufficient
 from analysis.turnaround_models import (
     Week52,
@@ -592,6 +593,7 @@ def catalysts(x: "AnalysisInputs", run: AnalysisRun | None) -> tuple[list[Cataly
             who = f" ({ev.person})" if ev.person else ""
             out.append(Catalyst(kind="leadership", date=ev.date, text=f"{ev.role} departure{who}",
                                 source=", ".join(ev.sources) or ev.layer))
+    out += data_catalysts(x)
     da = run.devils_advocate if run else None
     if da is not None and da.ok:
         for req in da.bull_case_requirements:
@@ -601,6 +603,45 @@ def catalysts(x: "AnalysisInputs", run: AnalysisRun | None) -> tuple[list[Cataly
             "Debt maturity dates: not shown — the FMP maturity schedule is not implemented yet. The Macro lens's "
             "current vs long-term debt split is the proxy.")
     return out, note
+
+
+def data_catalysts(x: "AnalysisInputs") -> list[Catalyst]:
+    """Catalysts read from the data rather than the lenses: share buybacks (TTM repurchases vs market
+    cap, net of issuance), the next ex-dividend date and the direction of analyst EPS revisions.
+    Context only: they never change the range or the confidence."""
+    out: list[Catalyst] = []
+    rep, iss, mcap = x.f.ttm("repurchase_of_stock"), x.f.ttm("issuance_of_stock"), x.market_cap
+    if not rep.ok:
+        out.append(Catalyst(kind="buyback", text=f"Buybacks: {rep.status}"))
+    elif rep.value < 0 and mcap.ok:
+        spent = -rep.value
+        yld = spent / mcap.value
+        net = spent - (iss.value if iss.ok and iss.value > 0 else 0.0)
+        net_txt = f"; net of issuance {net / mcap.value:.1%}" if iss.ok else "; issuance not reported"
+        if yld >= config.BUYBACK_CATALYST_MIN_YIELD:
+            out.append(Catalyst(kind="buyback", date=rep.period_end,
+                                text=f"Buybacks: {x.info.get('currency') or ''} {human(spent)} repurchased "
+                                     f"({rep.period_label}), "
+                                     f"{yld:.1%} of market cap{net_txt}",
+                                source=f"cash-flow statement ({rep.provider or 'yfinance'})"))
+    ex = x.info.date("ex_dividend_date")
+    if x.dividends.payer:
+        if ex is not None and ex >= x.today:
+            out.append(Catalyst(kind="dividend", date=ex, text=f"Next ex-dividend date {ex}",
+                                source=f"yfinance info ({x.info.provider or 'yfinance'})"))
+        else:
+            out.append(Catalyst(kind="dividend", text="Next ex-dividend date: N/A - not announced yet"))
+    rev = x.context.revisions_90d
+    if rev in ("up", "down"):
+        out.append(Catalyst(kind="estimates", text=f"Analyst EPS estimates revised {rev} over 90 days "
+                                                     f"({x.context.revisions_detail})",
+                            source="yfinance EPS trend (context only)"))
+    elif rev == "flat":
+        out.append(Catalyst(kind="estimates", text=f"Analyst EPS estimates flat over 90 days ({x.context.revisions_detail})",
+                            source="yfinance EPS trend (context only)"))
+    else:
+        out.append(Catalyst(kind="estimates", text=f"Analyst estimate revisions: {rev}"))
+    return out
 
 
 def valuation_recovery_status() -> str:

@@ -107,7 +107,7 @@ class TechnicalSignal(BaseModel):
 
 
 class Catalyst(BaseModel):
-    kind: str  # earnings | leadership | lens | debt_maturity
+    kind: str  # earnings | leadership | lens | buyback | dividend | estimates | debt_maturity
     date: dt.date | None = None
     text: str
     source: str = ""

@@ -72,6 +72,7 @@ FIELDS: dict[str, FieldSpec] = {
         # The next scheduled earnings date (Yahoo moves it forward after each report; the most recent
         # one until then). Lets the info cache expire after a report without fetching the calendar.
         _f("earnings_timestamp", "info", ["earningsTimestampStart", "earningsTimestamp"], "date"),
+        _f("ex_dividend_date", "info", ["exDividendDate"], "date"),
         # ---------------- income statement ----------------
         _f("total_revenue", "income", ["Total Revenue", "Operating Revenue"], "monetary", flow=True, health=True),
         _f("cost_of_revenue", "income", ["Cost Of Revenue", "Reconciled Cost Of Revenue"], "monetary", flow=True),

@@ -484,6 +484,9 @@ PEAK_MARGIN_RATIO = 1.5
 INSIDER_LOOKBACK_MONTHS = 6
 INSIDER_CLUSTER_MIN = 3
 INSIDER_CLUSTER_DAYS = 90
+# Turnaround catalysts from the data (context only, never scored): TTM buybacks are listed as a
+# catalyst when they reach this share of the market cap (the buyback yield).
+BUYBACK_CATALYST_MIN_YIELD = 0.02
 # Insider trades are loaded this far back so the turnaround can check the whole current
 # drawdown (its 52-week high is at most ROLLING_HIGH_DAYS old); the activity summary and
 # the Devil's Advocate payload still cover INSIDER_LOOKBACK_MONTHS only.
