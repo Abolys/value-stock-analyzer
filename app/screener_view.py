@@ -393,6 +393,28 @@ def list_picker_rows(today: date | None = None) -> list[dict[str, Any]]:
     return rows
 
 
+DIVERGENCE_TITLE = "Quick estimate vs full check: big differences"
+DIVERGENCE_NOTE = (f"Stage 1 screens every ticker on Yahoo's quick summary figures; stage 2 recomputes the metric "
+                   f"from the full statements for the survivors. Listed: tickers where the two differ by more than "
+                   f"{config.STAGE_DIVERGENCE:.0%} (STAGE_DIVERGENCE), usually because the summary is older or "
+                   f"defined differently. The full check is the one the status uses.")
+_RATIO_METRICS = ("net debt / EBITDA",)
+
+
+def divergence_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """The divergence log with plain column names and each value in its metric's unit."""
+    def fmt(metric: str, v: float | None) -> str:
+        if v is None:
+            return "N/A"
+        return f"{v:.2f}x" if metric in _RATIO_METRICS else f"{v:+.1%}" if metric == "margin of safety" else f"{v:.1%}"
+
+    return pd.DataFrame([{"Ticker": r["ticker"], "Metric": r["metric"],
+                          "Quick estimate (stage 1)": fmt(r["metric"], r["stage1"]),
+                          "Full check (stage 2)": fmt(r["metric"], r["stage2"]),
+                          "Difference": f"{r['rel_diff']:.0%}" if r["rel_diff"] is not None else "N/A"} for r in rows],
+                        columns=["Ticker", "Metric", "Quick estimate (stage 1)", "Full check (stage 2)", "Difference"])
+
+
 NO_INFO_HINT = "likely acquired or delisted since its list's holdings date"
 
 

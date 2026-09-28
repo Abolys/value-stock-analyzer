@@ -188,3 +188,14 @@ def test_old_universe_lists_are_marked_and_load_failures_hinted():
             assert "failed to load" in cowz["stale_note"]
     assert sv.load_failure_hint("info: yfinance returned no info for CTRA") == sv.NO_INFO_HINT
     assert sv.load_failure_hint("statements: timeout") == ""
+
+
+def test_divergence_table_has_plain_names_and_units():
+    df = sv.divergence_frame([
+        {"ticker": "HOG", "metric": "FCF yield (raw)", "stage1": 0.04154, "stage2": -0.04643, "rel_diff": 2.12},
+        {"ticker": "LYFT", "metric": "net debt / EBITDA", "stage1": -10.78, "stage2": -3.304, "rel_diff": 0.69},
+        {"ticker": "G", "metric": "margin of safety", "stage1": 0.02653, "stage2": 0.03579, "rel_diff": 0.35}])
+    assert list(df.columns) == ["Ticker", "Metric", "Quick estimate (stage 1)", "Full check (stage 2)", "Difference"]
+    assert df.iloc[0].tolist() == ["HOG", "FCF yield (raw)", "4.2%", "-4.6%", "212%"]
+    assert df.iloc[1]["Quick estimate (stage 1)"] == "-10.78x" and df.iloc[2]["Full check (stage 2)"] == "+3.6%"
+    assert "Stage 1 screens every ticker" in sv.DIVERGENCE_NOTE

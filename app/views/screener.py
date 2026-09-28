@@ -192,8 +192,9 @@ def render(provider) -> None:
     scatter(shown)
     div = store.load_divergences(run.run_id, db)
     if div:
-        with st.expander(f"Stage-1 / stage-2 divergences ({len(div)})"):
-            st.dataframe(pd.DataFrame(div), hide_index=True)
+        with st.expander(f"{sv.DIVERGENCE_TITLE} ({len(div)})"):
+            st.caption(sv.DIVERGENCE_NOTE)
+            st.dataframe(sv.divergence_frame(div), hide_index=True, width="stretch")
     if run.field_na:
         with st.expander("Per-field N/A counts"):
             st.dataframe(pd.DataFrame([{"field": k, "N/A": v["na"], "of": v["of"]} for k, v in run.field_na.items()]),
