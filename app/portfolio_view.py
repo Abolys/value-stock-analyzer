@@ -7,7 +7,6 @@ from __future__ import annotations
 from datetime import datetime
 
 import pandas as pd
-from pandas.io.formats.style import Styler
 from pydantic import BaseModel, ConfigDict
 
 from analysis.turnaround import benchmark_for
@@ -123,12 +122,7 @@ def holdings_frame(views: list[HoldingView]) -> tuple[pd.DataFrame, pd.DataFrame
     return df, st
 
 
-def style_states(df: pd.DataFrame, states: pd.DataFrame) -> Styler:
-    def colour(_df: pd.DataFrame) -> pd.DataFrame:
-        return states.map(lambda s: (f"color: {theme.CELL_TEXT[s]}; background-color: {theme.CELL_BG[s]}"
-                                     if theme.CELL_TEXT.get(s) else ""))
-
-    return df.style.apply(colour, axis=None)
+style_states = theme.style_states  # shared with the Screener
 
 
 def totals_by_currency(views: list[HoldingView]) -> pd.DataFrame:

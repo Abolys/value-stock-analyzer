@@ -46,5 +46,15 @@ CELL_BG = {"pass": "rgba(12,163,12,0.10)", "fail": "rgba(208,59,59,0.10)", "na":
            "nm": "rgba(250,178,25,0.16)", "info": ""}
 
 
+def style_states(df, states):
+    """A pandas Styler colouring each cell by its state in `states` (same shape as `df`): pass green,
+    fail red, na grey, nm amber; "" leaves a cell plain."""
+    def colour(_df):
+        return states.map(lambda s: (f"color: {CELL_TEXT[s]}; background-color: {CELL_BG[s]}"
+                                     if CELL_TEXT.get(s) else ""))
+
+    return df.style.apply(colour, axis=None)
+
+
 def ticker_color(ticker: str) -> str:
     return CATEGORICAL[zlib.crc32(ticker.upper().encode()) % len(CATEGORICAL)]

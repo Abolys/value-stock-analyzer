@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 import config
-from app import auth, charts, screen_jobs, ui
+from app import auth, charts, screen_jobs, theme, ui
 from app import screener_view as sv
 from app.stock_view import Tag
 from data.universe import list_labels
@@ -194,7 +194,9 @@ def render(provider) -> None:
     if div:
         with st.expander(f"{sv.DIVERGENCE_TITLE} ({len(div)})"):
             st.caption(sv.DIVERGENCE_NOTE)
-            st.dataframe(sv.divergence_frame(div), hide_index=True, width="stretch")
+            rf = {r.ticker: (r.risk_free.value if r.risk_free.ok else None) for r in results}
+            st.dataframe(theme.style_states(sv.divergence_frame(div), sv.divergence_states(div, rf)),
+                         hide_index=True, width="stretch")
     if run.field_na:
         with st.expander("Per-field N/A counts"):
             st.dataframe(pd.DataFrame([{"field": k, "N/A": v["na"], "of": v["of"]} for k, v in run.field_na.items()]),

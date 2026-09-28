@@ -199,3 +199,20 @@ def test_divergence_table_has_plain_names_and_units():
     assert df.iloc[0].tolist() == ["HOG", "FCF yield (raw)", "4.2%", "-4.6%", "212%"]
     assert df.iloc[1]["Quick estimate (stage 1)"] == "-10.78x" and df.iloc[2]["Full check (stage 2)"] == "+3.6%"
     assert "Stage 1 screens every ticker" in sv.DIVERGENCE_NOTE
+
+
+def test_divergence_values_coloured_by_the_screens_pass_mark():
+    import config
+
+    rows = [{"ticker": "HOG", "metric": "FCF yield (raw)", "stage1": 0.0415, "stage2": -0.0464, "rel_diff": 2.1},
+            {"ticker": "LYFT", "metric": "net debt / EBITDA", "stage1": -10.78, "stage2": 3.5, "rel_diff": 1.3},
+            {"ticker": "G", "metric": "margin of safety", "stage1": 0.25, "stage2": 0.03, "rel_diff": 0.9},
+            {"ticker": "X", "metric": "FCF yield (raw)", "stage1": 0.08, "stage2": 0.05, "rel_diff": 0.4}]
+    st_ = sv.divergence_states(rows, {"HOG": 0.04, "LYFT": 0.04, "G": 0.04})  # no 10-year yield known for X
+    q, f = "Quick estimate (stage 1)", "Full check (stage 2)"
+    assert (st_.at[0, q], st_.at[0, f]) == ("pass", "fail")  # 4.2% beats the 4% 10-year; −4.6% doesn't
+    assert (st_.at[1, q], st_.at[1, f]) == ("pass", "fail")  # net cash passes; 3.5x > MAX_NET_DEBT_EBITDA
+    assert (st_.at[2, q], st_.at[2, f]) == ("pass", "fail")  # 25% ≥ MIN_MARGIN_OF_SAFETY; 3% isn't
+    assert (st_.at[3, q], st_.at[3, f]) == ("na", "na")  # can't judge an FCF yield without the 10-year yield
+    assert st_.at[0, "Difference"] == "" and st_.at[0, "Ticker"] == ""  # the other columns stay plain
+    assert config.MAX_NET_DEBT_EBITDA < 3.5

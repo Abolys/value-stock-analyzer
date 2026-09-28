@@ -397,8 +397,35 @@ DIVERGENCE_TITLE = "Quick estimate vs full check: big differences"
 DIVERGENCE_NOTE = (f"Stage 1 screens every ticker on Yahoo's quick summary figures; stage 2 recomputes the metric "
                    f"from the full statements for the survivors. Listed: tickers where the two differ by more than "
                    f"{config.STAGE_DIVERGENCE:.0%} (STAGE_DIVERGENCE), usually because the summary is older or "
-                   f"defined differently. The full check is the one the status uses.")
+                   f"defined differently. The full check is the one the status uses. Green passes the screen's "
+                   f"pass mark for that metric, red fails it.")
 _RATIO_METRICS = ("net debt / EBITDA",)
+
+
+def divergence_pass(metric: str, value: float | None, risk_free: float | None) -> str:
+    """pass / fail against the screen's own pass mark for the metric (the final, not loosened, test);
+    na when it can't be judged (no value, or no 10-year yield for an FCF yield)."""
+    if value is None:
+        return "na"
+    if metric == "margin of safety":
+        ok = value >= config.MIN_MARGIN_OF_SAFETY
+    elif metric in _RATIO_METRICS:
+        ok = value <= config.MAX_NET_DEBT_EBITDA
+    elif metric.startswith("FCF yield"):
+        if risk_free is None:
+            return "na"
+        ok = value >= risk_free + config.MIN_FCF_SPREAD_OVER_10Y
+    else:
+        return ""
+    return "pass" if ok else "fail"
+
+
+def divergence_states(rows: list[dict[str, Any]], risk_free: dict[str, float | None]) -> pd.DataFrame:
+    """Cell states for divergence_frame: both value columns judged by the same pass mark."""
+    cols = ["Ticker", "Metric", "Quick estimate (stage 1)", "Full check (stage 2)", "Difference"]
+    return pd.DataFrame([{"Quick estimate (stage 1)": divergence_pass(r["metric"], r["stage1"], risk_free.get(r["ticker"])),
+                          "Full check (stage 2)": divergence_pass(r["metric"], r["stage2"], risk_free.get(r["ticker"]))}
+                         for r in rows], columns=cols).fillna("")
 
 
 def divergence_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
