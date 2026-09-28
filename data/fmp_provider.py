@@ -37,6 +37,9 @@ class FMPProvider(DataProvider):
     def get_statement(self, ticker: str, kind: StatementKind, freq: Freq) -> Statement:
         self._todo(f"{freq} {kind} statement")
 
+    def get_price_frame(self, ticker: str) -> pd.DataFrame:
+        self._todo("price history")
+
     def get_price_history(self, ticker: str, adjusted: bool) -> pd.Series:
         self._todo("price history")
 

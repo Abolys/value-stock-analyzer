@@ -7,6 +7,8 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+from typing import Callable
+
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
@@ -128,7 +130,7 @@ def load_bundle(provider: DataProvider, run: AnalysisRun, db_path=None) -> Price
     sel = select_peers(run.ticker, run.industry, mcap, db_path)
     if sel.ok and sel.screen_run_id is not None:
         wanted = {p.ticker for p in sel.peers}
-        b.peers = [r for r in screen_store.load_results(sel.screen_run_id, db_path) if r.ticker in wanted]
+        b.peers = screen_store.load_results(sel.screen_run_id, db_path, tickers=wanted)
         b.peer_note = (f"{len(b.peers)} peers from your universe lists (same industry, nearest market cap; "
                        f"{'partial ' if sel.screen_run_partial else ''}screen run {sel.screen_run_id}, "
                        f"{sel.screen_run_date}"
@@ -145,25 +147,45 @@ def lens_list(run: AnalysisRun) -> list:
     return [run.lens(n) for n in LENSES]
 
 
-def build_charts(run: AnalysisRun, bundle: PriceBundle) -> dict[str, ChartOut | None]:
-    s = run.screen
-    q = run.quant
-    out: dict[str, ChartOut | None] = {
-        "week52": charts.week52_bar(run.week52) if run.week52 else None,
-        "small_multiples": charts.small_multiples(
-            bundle.closes, run.series, run.insiders.history_trades if run.insiders else [], run.ticker),
-        "dot_strip": charts.dot_strip(lens_list(run), run.aggregate, [LENS_SHORT[n] for n in LENSES]),
-        "peers": charts.peer_strip(s, bundle.peers, bundle.peer_note) if s is not None and bundle.peers else None,
-        "heatmap": charts.sensitivity_heatmap(q.grid, s.price, q.reverse_dcf)
-        if isinstance(q, QuantResult) and s is not None else None,
-        "asset_floor": charts.asset_floor_panel(s.asset_floor, s.market_cap, run.currency) if s is not None else None,
-        "trap": charts.trap_panel(s.piotroski, s.altman, s.beneish) if s is not None else None,
-        "turnaround_range": charts.turnaround_range_bar(run.turnaround),
-        "drawdown": charts.drawdown_history(bundle.closes, bundle.bench, run.turnaround, run.ticker)
-        if run.turnaround is not None else None,
-    }
+def _dividend(run: AnalysisRun, _b: PriceBundle, part: int) -> ChartOut | None:
     div = charts.dividend_panel(run.dividends)
-    out["dividend_bars"], out["dividend_payout"] = div if div else (None, None)
+    return div[part] if div else None
+
+
+# Every chart and how to build it from the run and its price bundle.
+CHART_BUILDERS: dict[str, Callable[[AnalysisRun, PriceBundle], ChartOut | None]] = {
+    "week52": lambda run, b: charts.week52_bar(run.week52) if run.week52 else None,
+    "small_multiples": lambda run, b: charts.small_multiples(
+        b.closes, run.series, run.insiders.history_trades if run.insiders else [], run.ticker),
+    "dot_strip": lambda run, b: charts.dot_strip(lens_list(run), run.aggregate, [LENS_SHORT[n] for n in LENSES]),
+    "peers": lambda run, b: (charts.peer_strip(run.screen, b.peers, b.peer_note)
+                             if run.screen is not None and b.peers else None),
+    "heatmap": lambda run, b: (charts.sensitivity_heatmap(run.quant.grid, run.screen.price, run.quant.reverse_dcf)
+                               if isinstance(run.quant, QuantResult) and run.screen is not None else None),
+    "asset_floor": lambda run, b: (charts.asset_floor_panel(run.screen.asset_floor, run.screen.market_cap,
+                                                            run.currency) if run.screen is not None else None),
+    "trap": lambda run, b: (charts.trap_panel(run.screen.piotroski, run.screen.altman, run.screen.beneish)
+                            if run.screen is not None else None),
+    "turnaround_range": lambda run, b: charts.turnaround_range_bar(run.turnaround),
+    "drawdown": lambda run, b: (charts.drawdown_history(b.closes, b.bench, run.turnaround, run.ticker)
+                                if run.turnaround is not None else None),
+    "dividend_bars": lambda run, b: _dividend(run, b, 0),
+    "dividend_payout": lambda run, b: _dividend(run, b, 1),
+}
+# The charts each progressive-loading event changes ("inputs" draws them all). Rebuilding only
+# these keeps the Stock page from redrawing every chart on each of its ~7 events.
+CHARTS_FOR_EVENT: dict[str, tuple[str, ...]] = {
+    "quant": ("dot_strip", "heatmap"), "macro": ("dot_strip",), "moat": ("dot_strip",),
+    "devils_advocate": ("dot_strip",), "aggregate": ("dot_strip",), "turnaround": ("turnaround_range", "drawdown"),
+}
+
+
+def build_charts(run: AnalysisRun, bundle: PriceBundle, only: tuple[str, ...] | None = None,
+                 current: dict[str, ChartOut | None] | None = None) -> dict[str, ChartOut | None]:
+    """Every chart, or just `only` (updating `current`, which keeps the others)."""
+    out = dict(current or {})
+    for name in (only or CHART_BUILDERS):
+        out[name] = CHART_BUILDERS[name](run, bundle)
     return out
 
 

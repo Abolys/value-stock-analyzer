@@ -378,7 +378,7 @@ def llm_notice() -> LLMClient:
 
 def stale_cache_note(provider, since: int) -> str:
     """Cached data served during this run because the live source failed, with its age."""
-    stale = [ev for ev in provider.cache.events[since:] if ev.outcome == "stale"]
+    stale = [ev for ev in provider.cache.events_since(since) if ev.outcome == "stale"]
     if not stale:
         return ""
     dated = [ev for ev in stale if ev.fetched_at is not None]
@@ -389,11 +389,11 @@ def stale_cache_note(provider, since: int) -> str:
 
 def run_progressive(provider, ticker: str, lay: Layout, llm: LLMClient, use_edgar: bool) -> Entry | None:
     state: dict = {}
-    events_before = len(provider.cache.events)
+    events_before = provider.cache.event_count
 
-    def refresh_charts() -> None:
+    def refresh_charts(event: str = "inputs") -> None:
         e = state["entry"]
-        e.charts = sv.build_charts(e.run, e.bundle)
+        e.charts = sv.build_charts(e.run, e.bundle, only=sv.CHARTS_FOR_EVENT.get(event), current=e.charts)
 
     def on_result(name: str, result) -> None:
         if name == "inputs":
@@ -406,7 +406,7 @@ def run_progressive(provider, ticker: str, lay: Layout, llm: LLMClient, use_edga
             return
         e = state["entry"]
         setattr(e.run, name, result)
-        refresh_charts()
+        refresh_charts(name)
         if name in LENSES:
             draw_lens(lay[name], result)
             if name == "quant":
@@ -434,7 +434,6 @@ def run_progressive(provider, ticker: str, lay: Layout, llm: LLMClient, use_edga
     e.run, e.stale_note = run, note
     if note:
         st.warning(note)
-    refresh_charts() if "entry" in state else None
     for err in run.errors:
         st.error(f"Lens error: {err}")
     draw_history(lay["history"], run, e.bundle)

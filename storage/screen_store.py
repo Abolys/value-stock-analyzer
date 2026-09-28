@@ -150,11 +150,38 @@ def finished_tickers(run_id: int, path: Path | str = config.RUNS_DB_PATH, includ
         return {row[0] for row in conn.execute(sql, params)}
 
 
-def load_results(run_id: int, path: Path | str = config.RUNS_DB_PATH) -> list[ScreenResult]:
+def load_results(run_id: int, path: Path | str = config.RUNS_DB_PATH,
+                 tickers: set[str] | list[str] | None = None) -> list[ScreenResult]:
+    """A run's results (all, or only `tickers`), each parsed from its stored JSON."""
+    sql, params = "SELECT result_json FROM screen_results WHERE run_id=?", [run_id]
+    if tickers is not None:
+        tickers = sorted(tickers)
+        if not tickers:
+            return []
+        sql += f" AND ticker IN ({','.join('?' * len(tickers))})"
+        params += tickers
     with connect(path) as conn:
-        rows = conn.execute("SELECT result_json FROM screen_results WHERE run_id=? ORDER BY ticker",
-                            (run_id,)).fetchall()
+        rows = conn.execute(sql + " ORDER BY ticker", params).fetchall()
     return [ScreenResult.model_validate_json(r[0]) for r in rows]
+
+
+class PeerRow(BaseModel):
+    ticker: str
+    name: str = ""
+    industry: str | None = None
+    market_cap: float | None = None  # None unless the stored market cap is ok
+
+
+def peer_rows(run_id: int, path: Path | str = config.RUNS_DB_PATH) -> dict[str, PeerRow]:
+    """Ticker, name, industry and market cap of every result in a run, read with SQLite's JSON
+    functions instead of parsing each full result (peer selection runs on every analysis)."""
+    with connect(path) as conn:
+        rows = conn.execute(
+            "SELECT ticker, json_extract(result_json, '$.name'), json_extract(result_json, '$.industry'), "
+            "json_extract(result_json, '$.market_cap.value'), json_extract(result_json, '$.market_cap.status') "
+            "FROM screen_results WHERE run_id=?", (run_id,)).fetchall()
+    return {t: PeerRow(ticker=t, name=n or "", industry=ind, market_cap=mc if st == "ok" else None)
+            for t, n, ind, mc, st in rows}
 
 
 def load_divergences(run_id: int, path: Path | str = config.RUNS_DB_PATH) -> list[dict[str, Any]]:

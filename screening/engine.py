@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
@@ -53,13 +53,11 @@ def failed_to_load(ticker: str, sources: str, reason: str) -> ScreenResult:
 
 def info_as_of(info: InfoResult) -> date | None:
     """Info's mostRecentQuarter (epoch seconds in yfinance) as a date."""
-    v = info.get("most_recent_quarter")
-    if v is None:
-        return None
-    try:
-        return datetime.fromtimestamp(float(v), tz=timezone.utc).date()
-    except (TypeError, ValueError, OverflowError):
-        return None
+    return info.date("most_recent_quarter")
+
+
+STAGE1_STALENESS_NOTE = ("staleness checked by age only at stage 1: the earnings history is fetched only for "
+                         "tickers that reach stage 2")
 
 
 def stage1_info_values(ctx: ScreenContext, info: InfoResult) -> dict[str, Datum]:
@@ -88,16 +86,16 @@ def adjusted_share_trend(ctx: ScreenContext, ticker: str) -> ShareTrend:
 
 
 def stage1_cut_result(ticker: str, sources: str, info: InfoResult, route, s1, price: Datum,
-                      earnings: EarningsDates | None, today: date) -> ScreenResult:
+                      today: date) -> ScreenResult:
     as_of = info_as_of(info)
-    stale = periods.staleness(as_of, earnings, today)
+    stale = periods.staleness(as_of, None, today)  # age only: no earnings history for stage-1 cuts
     res = ScreenResult(ticker=ticker, name=info.get("long_name") or "", sources=sources, status=STATUS_FAIL,
                        decided_at_stage=1, status_reasons=[f"cut at stage 1: {r}" for r in s1.cut_reasons],
                        sector=route.sector, industry=route.industry, treatment=route.label,
                        currency=info.get("currency"), price=price, market_cap=s1.market_cap, stage1=s1,
                        metrics=s1.metrics, metrics_available=sum(m.available for m in s1.metrics),
                        fundamentals_as_of=as_of, stale=stale.stale, stale_label=stale.label,
-                       field_statuses=dict(s1.field_statuses), notes=list(s1.notes))
+                       field_statuses=dict(s1.field_statuses), notes=[*s1.notes, STAGE1_STALENESS_NOTE])
     lines = [f"**{ticker}** — {res.display_status}: cut at stage 1 (info fields, thresholds loosened by "
              f"STAGE1_SLACK {config.STAGE1_SLACK:.0%}); statements not fetched.",
              *[f"- {r}" for r in s1.cut_reasons],
@@ -132,9 +130,9 @@ def screen_ticker_full(ctx: ScreenContext, ticker: str, sources: str = "", price
     info_values = stage1_info_values(ctx, info)
     rf = risk_free_for(info, ctx.provider, ctx.cache, ctx.valet_fetch)
     s1 = stage1(info_values, price, rf, route, ticker)
+    if not s1.survives and not force_stage2:  # one yfinance call (info) for a stage-1 cut
+        return stage1_cut_result(ticker, sources, info, route, s1, price, ctx.today), None, info
     earnings = _earnings(ctx, ticker)
-    if not s1.survives and not force_stage2:
-        return stage1_cut_result(ticker, sources, info, route, s1, price, earnings, ctx.today), None, info
     try:
         f = load_fundamentals(ctx.provider, info, ticker)
     except ProviderError as exc:

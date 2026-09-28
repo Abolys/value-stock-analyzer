@@ -78,8 +78,7 @@ def _cache_stats(ctx: ScreenContext) -> tuple[int, int]:
     cache = ctx.cache
     if cache is None:
         return 0, 0
-    served = {e.ticker for e in cache.events if e.method == "get_info" and e.outcome == "hit"}
-    return cache.refetched_because_reported(), len(served)
+    return cache.refetched_because_reported(), len(cache.info_hit_tickers)
 
 
 def run_screen(ctx: ScreenContext, lists: list[str] | None = None, resume: bool = False,

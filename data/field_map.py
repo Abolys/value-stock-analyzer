@@ -69,6 +69,9 @@ FIELDS: dict[str, FieldSpec] = {
         _f("company_officers", "info", ["companyOfficers"], "table"),
         _f("last_fiscal_year_end", "info", ["lastFiscalYearEnd"], "date"),
         _f("most_recent_quarter", "info", ["mostRecentQuarter"], "date"),
+        # The next scheduled earnings date (Yahoo moves it forward after each report; the most recent
+        # one until then). Lets the info cache expire after a report without fetching the calendar.
+        _f("earnings_timestamp", "info", ["earningsTimestampStart", "earningsTimestamp"], "date"),
         # ---------------- income statement ----------------
         _f("total_revenue", "income", ["Total Revenue", "Operating Revenue"], "monetary", flow=True, health=True),
         _f("cost_of_revenue", "income", ["Cost Of Revenue", "Reconciled Cost Of Revenue"], "monetary", flow=True),

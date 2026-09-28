@@ -123,14 +123,45 @@ def test_info_refreshes_after_officer_days_while_fundamentals_still_valid(cache,
 def test_cache_hit_miss_and_price_expiry(cache, clock):
     p = CountingProvider()
     cp = CachedProvider(p, cache)
+    prices = lambda: len([c for c in p.calls if c[0] == "prices"])  # noqa: E731
     cp.get_price_history("X", True)
     assert cache.events[-1].outcome == "miss"
+    fetched = prices()  # one cached price frame (this provider builds it from its two close series)
     cp.get_price_history("X", True)
+    cp.get_price_history("X", False)  # the other kind of close comes from the same cached frame
     assert cache.events[-1].outcome == "hit"
-    assert len([c for c in p.calls if c[0] == "prices"]) == 1
+    assert prices() == fetched
     clock.now += timedelta(days=config.CACHE_TTL_PRICES_DAYS, seconds=1)
     cp.get_price_history("X", True)
-    assert len([c for c in p.calls if c[0] == "prices"]) == 2
+    assert prices() == 2 * fetched
+
+
+def test_one_download_serves_both_closes_and_the_ranges(cache):
+    """yfinance: adjusted closes, actual closes and highs/lows come from one .history() call."""
+    import pandas as pd
+
+    from data.yfinance_provider import YFinanceProvider
+
+    calls = []
+    idx = pd.date_range("2026-01-05", periods=3, freq="B")
+    df = pd.DataFrame({"Close": [10.0, 11.0, 12.0], "Adj Close": [9.0, 10.0, 11.0], "High": [10.5, 11.5, 12.5],
+                       "Low": [9.5, 10.5, 11.5]}, index=idx)
+
+    class T:
+        def history(self, **kw):
+            calls.append(kw)
+            return df
+
+    class NoWait:
+        def wait(self):
+            pass
+
+    cp = CachedProvider(YFinanceProvider(ticker_factory=lambda t: T(), throttle=NoWait()), cache)
+    assert list(cp.get_price_history("X", False)) == [10.0, 11.0, 12.0]
+    assert list(cp.get_price_history("X", True)) == [9.0, 10.0, 11.0]
+    rng = cp.get_price_range("X")
+    assert rng["high"].iloc[0] == 10.5 * 0.9 and rng.attrs["provider"] == "yfinance"
+    assert len(calls) == 1
 
 
 def test_stale_entry_served_when_source_fails(cache, clock):
@@ -159,3 +190,21 @@ def test_batch_prices_use_cache_for_fresh_tickers(cache):
     res = cp.batch_latest_prices(["A", "B", "C"])
     assert [c for c in p.calls if c[0] == "batch"] == [("batch", ("A", "B")), ("batch", ("C",))]
     assert set(res.prices) == {"A", "B", "C"}
+
+
+def test_event_log_is_bounded_but_run_totals_survive_trimming(cache, monkeypatch):
+    from data import cache_policy
+    from data.cache import CacheEvent, DiskCache
+
+    monkeypatch.setattr(config, "CACHE_EVENT_LOG_MAX", 3)
+    c = DiskCache(cache.path.with_name("small.db"))
+    c.record(CacheEvent("k", "refetch", cache_policy.EARNINGS_REASON_PREFIX + " 2026-08-01 + 3d grace",
+                        ticker="A", method="get_statement"))
+    c.record(CacheEvent("k", "hit", ticker="B", method="get_info"))
+    mark = c.event_count
+    for i in range(5):
+        c.record(CacheEvent(f"x{i}", "miss", ticker=f"T{i}", method="get_info"))
+    assert len(c.events) == 3 and c.event_count == 7  # the log is bounded
+    assert c.refetched_because_reported() == 1 and c.info_hit_tickers == {"B"}  # totals kept
+    assert [e.key for e in c.events_since(mark)] == ["x2", "x3", "x4"]  # as far as the log holds them
+    assert c.events_since(c.event_count) == []

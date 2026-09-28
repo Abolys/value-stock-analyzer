@@ -49,6 +49,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `LEADERSHIP_HIGH_COUNT` | 2 | Departures in the window that make the flag "high" (1 = "flagged") |
 | `CORP_ACTION_PRICE_GAP` / `CORP_ACTION_SHARE_CHANGE` | 0.70 / 0.50 | Heuristic break detection (see Data sources) |
 | `CACHE_TTL_PRICES` | 1 day | Price cache expiry |
+| `CACHE_EVENT_LOG_MAX` | 5000 | Recent cache events (hit, miss, refetch, stale) kept in memory by the long-running app; the screen summary's counts are kept as running totals |
 | Fundamentals cache (rule) | Valid until the company's next earnings date + `EARNINGS_REFETCH_GRACE_DAYS` (3), capped at `CACHE_TTL_FUNDAMENTALS_MAX` (100 days) | Fundamentals only change when a company reports, so they're refetched after a report, not on a fixed timer. No known earnings date → the cap applies |
 | `OFFICER_REFRESH_DAYS` | 30 | The `info` call (and its officer snapshot) is refetched at least this often, even if fundamentals are still cached |
 | `SCATTER_LABEL_TOP_N` | 10 | Screener scatter labels only this many points |

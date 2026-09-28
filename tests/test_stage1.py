@@ -115,3 +115,56 @@ def test_stale_ticker_still_screens_with_flag():
     assert res.stale and "fundamentals may be stale" in res.stale_label
     assert res.status in ("Pass", "Fail", "Incomplete") and res.metrics_available == 4
     assert res.stale_label in res.rationale
+
+
+class _Counting:
+    """Delegates to a provider and counts calls per method."""
+
+    def __init__(self, inner):
+        self.inner, self.name, self.calls = inner, inner.name, []
+
+    def __getattr__(self, method):
+        fn = getattr(self.inner, method)
+
+        def call(*a, **k):
+            self.calls.append(method)
+            return fn(*a, **k)
+
+        return call
+
+
+def test_stage1_cut_costs_one_info_call_and_no_earnings_calendar(tmp_path):
+    """72% of a screen stops at stage 1: its only data request must be the info call (the batch price is
+    passed in). The info cache expires by the info's own earnings timestamp, not a calendar fetch."""
+    from data.cache import CachedProvider, DiskCache
+    from data.fixture_provider import captured_on, fixture_provider
+    from data.prices import actual_latest_price
+    from data.provider import DataProvider
+    from screening.engine import ScreenContext, screen_ticker
+
+    base = fixture_provider()
+    price = actual_latest_price(base, "MELI")  # stands in for the run's batch price
+    counting = _Counting(base)
+    DataProvider.register(type(counting))
+    cp = CachedProvider(counting, DiskCache(tmp_path / "c.db"))
+    ctx = ScreenContext(provider=cp, db_path=tmp_path / "r.db", today=captured_on("MELI"),
+                        valet_fetch=lambda s: (4.0, captured_on("MELI")))
+    res = screen_ticker(ctx, "MELI", "golden", price=price)
+    assert res.decided_at_stage == 1  # MELI is cut at stage 1
+    assert "get_earnings_dates" not in counting.calls
+    assert counting.calls.count("get_info") == 1
+    assert [c for c in counting.calls if c not in ("get_info", "get_price_frame")] == []  # FX / ^TNX only
+    assert any("staleness checked by age only" in n for n in res.notes)
+    entry = cp.cache.get(cp.key_for("get_info", "MELI"))
+    assert entry.expiry_reason  # expiry decided without the calendar
+
+
+def test_info_next_earnings_from_its_own_timestamp():
+    from datetime import date
+
+    from data.provider import InfoResult
+
+    info = InfoResult(ticker="X", values={"earnings_timestamp": 1788465600}, statuses={"earnings_timestamp": "ok"})
+    assert info.date("earnings_timestamp") == date(2026, 9, 3)
+    assert info.next_earnings(date(2026, 9, 1)) == date(2026, 9, 3)
+    assert info.next_earnings(date(2026, 9, 10)) is None  # already passed: not a "next" date

@@ -226,3 +226,19 @@ def test_indexing_refuses_non_positive_start():
     with pytest.raises(ValueError):
         charts.indexed(pd.Series([-1.0, 2.0], index=pd.bdate_range("2024-01-01", periods=2)),
                        pd.Timestamp("2024-01-01"))
+
+
+def test_progressive_events_rebuild_only_their_charts(monkeypatch):
+    """Each lens / turnaround event rebuilds only the charts it changes; the rest are kept as they are."""
+    from app import stock_view as sv
+
+    assert set(sv.CHARTS_FOR_EVENT) == {"quant", "macro", "moat", "devils_advocate", "aggregate", "turnaround"}
+    assert all(set(v) <= set(sv.CHART_BUILDERS) for v in sv.CHARTS_FOR_EVENT.values())
+    built = []
+    monkeypatch.setattr(sv, "CHART_BUILDERS", {k: (lambda run, b, k=k: built.append(k) or k)
+                                               for k in sv.CHART_BUILDERS})
+    everything = sv.build_charts(None, None)
+    assert set(everything) == set(sv.CHART_BUILDERS) and len(built) == len(sv.CHART_BUILDERS)
+    built.clear()
+    after = sv.build_charts(None, None, only=sv.CHARTS_FOR_EVENT["macro"], current={**everything, "trap": "kept"})
+    assert built == ["dot_strip"] and after["trap"] == "kept"

@@ -8,7 +8,7 @@ is added by implementing this interface; nothing downstream changes.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Literal
 
 import pandas as pd
@@ -42,6 +42,21 @@ class InfoResult(BaseModel):
         from data.values import na_field_not_found
 
         return self.statuses.get(canonical, na_field_not_found(canonical))
+
+    def date(self, canonical: str) -> date | None:
+        """A date field (yfinance gives epoch seconds) as a UTC date, or None."""
+        v = self.get(canonical)
+        if v is None:
+            return None
+        try:
+            return datetime.fromtimestamp(float(v), tz=timezone.utc).date()
+        except (TypeError, ValueError, OverflowError, OSError):
+            return None
+
+    def next_earnings(self, today: date) -> date | None:
+        """The info's own next earnings date, when it lies after `today` (else None)."""
+        d = self.date("earnings_timestamp")
+        return d if d is not None and d > today else None
 
 
 class Statement(BaseModel):
@@ -124,6 +139,15 @@ class DataProvider(ABC):
         """Daily closes indexed by date. adjusted=True → dividend- and split-adjusted
         closes; adjusted=False → actual traded closes (Rule 5)."""
 
+    def get_price_frame(self, ticker: str) -> pd.DataFrame:
+        """Daily prices in one frame (PRICE_FRAME_COLUMNS: "close", "adj_close" and, when the provider
+        has them, raw "high" / "low"), so one download serves both kinds of close and the ranges.
+        The default builds it from `get_price_history`; providers with a single download override it."""
+        frame = pd.DataFrame({"close": self.get_price_history(ticker, False),
+                              "adj_close": self.get_price_history(ticker, True)})
+        frame.attrs["provider"] = self.name
+        return frame
+
     def get_price_range(self, ticker: str) -> pd.DataFrame:
         """Daily highs and lows, dividend- and split-adjusted like `adjusted=True` closes
         (columns "high", "low"). Optional: providers without it raise ProviderUnavailable
@@ -148,6 +172,37 @@ class DataProvider(ABC):
 
     @abstractmethod
     def batch_latest_prices(self, tickers: list[str]) -> BatchPriceResult: ...
+
+
+PRICE_FRAME_COLUMNS = ("close", "adj_close", "high", "low")
+
+
+def closes_from_frame(frame: pd.DataFrame, ticker: str, adjusted: bool) -> pd.Series:
+    """Adjusted or actual daily closes from a price frame (Rule 5: never mixed)."""
+    col = "adj_close" if adjusted else "close"
+    if frame is None or frame.empty or col not in frame.columns:
+        raise ProviderError(f"no price history for {ticker}")
+    s = frame[col].dropna()
+    if s.empty:
+        raise ProviderError(f"no price history for {ticker}")
+    s = s.copy()
+    s.name = "adjusted_close" if adjusted else "close"
+    s.attrs["provider"] = frame.attrs.get("provider", "")
+    return s
+
+
+def range_from_frame(frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    """Highs and lows scaled onto the adjusted closes (× adj_close / close for each day)."""
+    if frame is None or frame.empty or any(c not in frame.columns for c in PRICE_FRAME_COLUMNS):
+        raise ProviderUnavailable(f"no daily highs and lows for {ticker}")
+    df = frame[list(PRICE_FRAME_COLUMNS)].dropna()
+    df = df[df["close"] > 0]
+    if df.empty:
+        raise ProviderUnavailable(f"no daily highs and lows for {ticker}")
+    factor = df["adj_close"] / df["close"]
+    out = pd.DataFrame({"high": df["high"] * factor, "low": df["low"] * factor})
+    out.attrs["provider"] = frame.attrs.get("provider", "")
+    return out
 
 
 def to_date_index(s: pd.Series) -> pd.Series:

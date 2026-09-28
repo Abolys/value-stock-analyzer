@@ -11,6 +11,7 @@ from __future__ import annotations
 import pickle
 import sqlite3
 import threading
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -20,7 +21,9 @@ import pandas as pd
 
 import config
 from data import cache_policy
-from data.provider import BatchPriceResult, DataProvider, PricePoint, ProviderError
+from data.provider import (
+    BatchPriceResult, DataProvider, PricePoint, ProviderError, closes_from_frame, range_from_frame,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS cache (
@@ -75,7 +78,26 @@ class DiskCache:
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.execute(SCHEMA)
         self._conn.commit()
-        self.events: list[CacheEvent] = []
+        # Recent events only (the app's provider lives as long as the server); running totals for
+        # the screen summary are kept separately so trimming the log never changes them.
+        self.events: deque[CacheEvent] = deque(maxlen=config.CACHE_EVENT_LOG_MAX)
+        self.event_count = 0  # every event ever recorded; a caller's mark for events_since()
+        self.reported_tickers: set[str] = set()  # fundamentals refetched because the company reported
+        self.info_hit_tickers: set[str] = set()  # info served from cache
+
+    def record(self, ev: CacheEvent) -> None:
+        self.events.append(ev)
+        self.event_count += 1
+        if (ev.outcome == "refetch" and ev.method != "get_earnings_dates" and ev.ticker
+                and ev.reason.startswith(cache_policy.EARNINGS_REASON_PREFIX)):
+            self.reported_tickers.add(ev.ticker)
+        if ev.outcome == "hit" and ev.method == "get_info" and ev.ticker:
+            self.info_hit_tickers.add(ev.ticker)
+
+    def events_since(self, mark: int) -> list[CacheEvent]:
+        """Events recorded after `mark` (a previous event_count), as far as the log still holds them."""
+        n = min(self.event_count - mark, len(self.events))
+        return list(self.events)[-n:] if n > 0 else []
 
     def get(self, key: str) -> CacheEntry | None:
         with self._lock:
@@ -110,14 +132,14 @@ class DiskCache:
         now = self.clock()
         entry = self.get(key)
         if entry is not None and entry.expires_at > now:
-            self.events.append(CacheEvent(key, "hit", entry.expiry_reason, entry.fetched_at, entry.age(now),
+            self.record(CacheEvent(key, "hit", entry.expiry_reason, entry.fetched_at, entry.age(now),
                                           ticker=ticker, method=method))
             return entry.payload
         try:
             payload = fetch_fn()
         except ProviderError as exc:
             if entry is not None:
-                self.events.append(CacheEvent(key, "stale", entry.expiry_reason, entry.fetched_at,
+                self.record(CacheEvent(key, "stale", entry.expiry_reason, entry.fetched_at,
                                               entry.age(now), error=str(exc), ticker=ticker, method=method))
                 return entry.payload
             raise
@@ -128,9 +150,9 @@ class DiskCache:
             provider = payload.attrs.get("provider")
         self.put(key, kind, payload, expires_at, reason, ticker, method, provider, fetched_at=now)
         if entry is None:
-            self.events.append(CacheEvent(key, "miss", ticker=ticker, method=method))
+            self.record(CacheEvent(key, "miss", ticker=ticker, method=method))
         else:
-            self.events.append(CacheEvent(key, "refetch", entry.expiry_reason, entry.fetched_at, entry.age(now),
+            self.record(CacheEvent(key, "refetch", entry.expiry_reason, entry.fetched_at, entry.age(now),
                                           ticker=ticker, method=method))
         return payload
 
@@ -142,9 +164,7 @@ class DiskCache:
 
     def refetched_because_reported(self) -> int:
         """Distinct tickers whose fundamentals were refetched because an earnings date passed."""
-        return len({e.ticker for e in self.events
-                    if e.outcome == "refetch" and e.method != "get_earnings_dates"
-                    and e.reason.startswith(cache_policy.EARNINGS_REASON_PREFIX)})
+        return len(self.reported_tickers)
 
 
 def _key(provider: str, method: str, ticker: str, *args: Any) -> str:
@@ -177,16 +197,33 @@ class CachedProvider(DataProvider):
         return _key(self.inner.name, method, ticker, *args)
 
     def get_info(self, ticker):
-        return self._cached("info", "get_info", ticker)
+        """Expires by the info's own next earnings date (earningsTimestamp), capped at OFFICER_REFRESH_DAYS,
+        so fetching info never costs an extra earnings-calendar call (two yfinance requests); without
+        a date the cap applies."""
+        key = _key(self.inner.name, "get_info", ticker)
+        holder: dict[str, Any] = {}
+
+        def fetch():
+            holder["v"] = self.inner.get_info(ticker)
+            return holder["v"]
+
+        return self.cache.fetch(key, "info", fetch, ticker=ticker, method="get_info",
+                                next_earnings=lambda: holder["v"].next_earnings(self.cache.clock().date())
+                                if "v" in holder else None)
 
     def get_statement(self, ticker, kind, freq):
         return self._cached("fundamentals", "get_statement", ticker, kind, freq)
 
+    def get_price_frame(self, ticker):
+        """One cached download per ticker per CACHE_TTL_PRICES_DAYS serves both kinds of close and the
+        highs and lows (they used to be three separate downloads of the same history)."""
+        return self._cached("prices", "get_price_frame", ticker)
+
     def get_price_history(self, ticker, adjusted):
-        return self._cached("prices", "get_price_history", ticker, adjusted)
+        return closes_from_frame(self.get_price_frame(ticker), ticker, adjusted)
 
     def get_price_range(self, ticker):
-        return self._cached("prices", "get_price_range", ticker)
+        return range_from_frame(self.get_price_frame(ticker), ticker)
 
     def get_splits(self, ticker):
         return self._cached("prices", "get_splits", ticker)
@@ -236,7 +273,7 @@ class CachedProvider(DataProvider):
                 entry = self.cache.get(_key(self.inner.name, "latest_price", tk))
                 if entry is not None:  # outage: serve the stale price with its age
                     result.prices[tk] = entry.payload
-                    self.cache.events.append(CacheEvent(tk, "stale", entry.expiry_reason, entry.fetched_at,
+                    self.cache.record(CacheEvent(tk, "stale", entry.expiry_reason, entry.fetched_at,
                                                         entry.age(now), error=why))
                 else:
                     result.failed[tk] = why

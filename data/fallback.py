@@ -53,6 +53,9 @@ class FallbackProvider(DataProvider):
     def get_statement(self, ticker, kind, freq):
         return self._run("get_statement", ticker, kind, freq)
 
+    def get_price_frame(self, ticker):
+        return self._run("get_price_frame", ticker)
+
     def get_price_history(self, ticker, adjusted):
         return self._run("get_price_history", ticker, adjusted)
 

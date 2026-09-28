@@ -393,7 +393,7 @@ def select_peers(ticker: str, industry: str | None, market_cap: float | None,
     if run is None:
         sel.status = NO_SCREEN_RUN
         return sel
-    results = {r.ticker: r for r in screen_store.load_results(run.run_id, db_path)}
+    results = screen_store.peer_rows(run.run_id, db_path)
     sel.screen_run_id, sel.screen_run_date = run.run_id, run.started_at.date()
     sel.screen_run_partial = run.status != screen_store.COMPLETED
     run_label = (f"partial screen run {run.run_id} ({run.status}; {done} of {run.total} tickers screened)"
@@ -408,9 +408,9 @@ def select_peers(ticker: str, industry: str | None, market_cap: float | None,
             sel.not_screened += 1
             continue
         sel.candidates_considered += 1
-        if r.industry == industry and r.market_cap.ok and r.market_cap.value > 0:
+        if r.industry == industry and r.market_cap is not None and r.market_cap > 0:
             cands.append(Peer(ticker=t, name=r.name or row.get("name", ""), industry=r.industry,
-                              market_cap=r.market_cap.value, sources=row.get("source", "")))
+                              market_cap=r.market_cap, sources=row.get("source", "")))
     cands.sort(key=lambda p: abs(math.log(p.market_cap / market_cap)))
     sel.peers = cands[:n]
     sel.source_note = (f"Peers come from the universe lists ({', '.join(sel.universe_lists)}), the app's only source "

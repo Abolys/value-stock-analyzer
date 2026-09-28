@@ -369,6 +369,7 @@ SPLIT_MATCH_TOLERANCE = 0.15  # a share jump within ±15% of the split ratio "is
 # Caching and fetching
 # --------------------------------------------------------------------------
 CACHE_TTL_PRICES_DAYS = 1
+CACHE_EVENT_LOG_MAX = 5000  # recent cache events kept in memory (running totals are kept separately)
 EARNINGS_REFETCH_GRACE_DAYS = 3
 CACHE_TTL_FUNDAMENTALS_MAX_DAYS = 100
 OFFICER_REFRESH_DAYS = 30
