@@ -193,3 +193,24 @@ def test_cash_deposit_row_on_the_portfolio_page(provider, monkeypatch):
     totals = next(df.value for df in at.dataframe if "Cost basis" in df.value.columns)
     assert list(totals["Type"]) == ["Cash deposits"]
     assert not any("At purchase" in df.value.columns for df in at.dataframe)  # no then vs now
+
+
+def test_clicking_a_holding_row_opens_its_stock_page(provider, monkeypatch):
+    from types import SimpleNamespace
+
+    from app import ui
+    from app import portfolio_view as pv
+    from app.views import portfolio
+    from portfolio import alerts as pa
+
+    monkeypatch.setattr(pa, "watchlist_tickers", lambda: [])
+    _hold_lulu()
+    at = AppTest.from_function(_portfolio_page, args=(provider,), default_timeout=120)
+    at.run()
+    assert any("Click a row to open" in c.value for c in at.caption)
+    opened = []
+    monkeypatch.setattr(ui, "open_ticker", lambda t: opened.append(t))
+    views = [pv.build_view(provider, h) for h in store.list_holdings()]
+    portfolio.open_selected(SimpleNamespace(selection=SimpleNamespace(rows=[0])), views)
+    portfolio.open_selected(SimpleNamespace(selection=SimpleNamespace(rows=[])), views)  # nothing clicked
+    assert opened == ["LULU"]

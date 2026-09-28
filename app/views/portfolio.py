@@ -50,7 +50,17 @@ def check_status() -> None:
 
 def holdings_table(views: list[pv.HoldingView]) -> None:
     df, states = pv.holdings_frame(views)
-    st.dataframe(pv.style_states(df, states), hide_index=True, width="stretch")
+    event = st.dataframe(pv.style_states(df, states), hide_index=True, width="stretch", on_select="rerun",
+                         selection_mode="single-row", key="pf-holdings")
+    st.caption("Click a row to open that stock's page.")
+    open_selected(event, views)
+
+
+def open_selected(event, views: list[pv.HoldingView]) -> None:
+    """A clicked holdings row opens that stock's page."""
+    rows = event.selection.rows if event and event.selection else []
+    if rows and rows[0] < len(views):
+        ui.open_ticker(views[rows[0]].holding.ticker)
     totals = pv.totals_by_currency(views)
     if not totals.empty:
         st.caption("Totals per currency (amounts in different currencies are never added together):")
