@@ -158,3 +158,16 @@ def test_list_picker_marks_stale_lists(monkeypatch, tmp_path, status, expected):
     save_refresh_status([RefreshOutcome(key="cowz", status=status, message="STALE: COWZ kept previous list")])
     row = next(r for r in sv.list_picker_rows() if r["key"] == "cowz")
     assert row["stale"] is expected and row["as_of"]
+
+
+def test_scatter_marks_pass_line_status_shapes_and_label_headroom():
+    import config
+
+    rs = [result("P1", mos=0.3, quality=10.0), result("I1", STATUS_INCOMPLETE, mos=0.1), result("F1", STATUS_FAIL)]
+    pts, excluded = sv.scatter_points(rs, top_n=3)
+    out = charts.screener_scatter(pts, excluded)
+    tr = out.fig.data[0]
+    assert list(tr.marker.symbol) == ["circle", "circle-open", "x-thin-open"]
+    assert any(s.type == "line" and s.x0 == config.MIN_MARGIN_OF_SAFETY for s in out.fig.layout.shapes)
+    assert out.fig.layout.yaxis.range[1] > 10  # a label on a 10.0 point stays inside the plot
+    assert "● Pass · ○ Incomplete · ✕ Fail" in out.caption

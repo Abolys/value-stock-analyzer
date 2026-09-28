@@ -84,10 +84,13 @@ def test_trap_panel_insufficient_piotroski():
     out = charts.trap_panel(pio, AltmanResult(z=d(1.8), zone="grey"), BeneishResult(m=d(-2.4)))
     assert any(e.startswith("Piotroski: Insufficient data") for e in out.excluded)
     assert any("Insufficient data" in (a.text or "") for a in out.fig.layout.annotations)
-    assert not any(getattr(t, "orientation", None) == "h" for t in out.fig.data)  # no Piotroski bar drawn
+    assert not any(t.hovertemplate and t.hovertemplate.startswith("Piotroski") for t in out.fig.data)  # no marker
     assert "Beneish is probabilistic; false positives happen." in out.notes
-    zones = [s for s in out.fig.layout.shapes if s.type == "rect"]
-    assert len(zones) == 3  # Altman's three zones shaded
+    rects = {}
+    for s in out.fig.layout.shapes:
+        if s.type == "rect":
+            rects[s.yref] = rects.get(s.yref, 0) + 1
+    assert rects == {"y": 3, "y2": 3, "y3": 1}  # Piotroski bands, Altman zones, Beneish flag side
 
 
 def _tx(kind: str, plan: bool = False, value: float = 1e5) -> InsiderTransaction:
@@ -242,3 +245,30 @@ def test_progressive_events_rebuild_only_their_charts(monkeypatch):
     built.clear()
     after = sv.build_charts(None, None, only=sv.CHARTS_FOR_EVENT["macro"], current={**everything, "trap": "kept"})
     assert built == ["dot_strip"] and after["trap"] == "kept"
+
+
+def test_heatmap_shades_still_separate_cells_when_all_are_above_price():
+    rates, growths = [0.07, 0.08, 0.09, 0.10, 0.11], [0.06, 0.085, 0.11, 0.135, 0.16]
+    values = [[166 + 30 * j + 40 * (4 - i) for j in range(5)] for i in range(5)]  # all well above 101
+    out = charts.sensitivity_heatmap(SensitivityGrid(rates=rates, growths=growths, values=values), d(101.0),
+                                     ReverseDcf(implied_growth=-0.106, history=d(0.11)))
+    hm = out.fig.data[0]
+    flat = [v for row in hm.z for v in row]
+    assert min(flat) > 0 and max(flat) == hm.zmax  # the grid's own range: the darkest cell is its maximum
+    assert min(flat) / hm.zmax < 0.5  # the cheapest cell is visibly lighter, not saturated like the rest
+    assert hm.text[0][0].endswith("%") and "<br>" in hm.text[0][0]  # value and upside in every cell
+    assert any("price implies -10.6%" in (a.text or "") for a in out.fig.layout.annotations)  # off-grid marker
+
+
+def test_small_multiples_compare_the_latest_quarter_with_a_year_earlier():
+    q = [date(2025, 5, 3), date(2025, 8, 2), date(2025, 11, 1), date(2026, 2, 1), date(2026, 5, 3)]
+    rev = [2.5e9, 2.6e9, 2.6e9, 3.6e9, 2.4e9]  # a holiday-quarter spike, then a normal quarter
+    series = FundamentalSeries(points={"total_revenue": [SeriesPoint(period_end=d_, value=v) for d_, v in zip(q, rev)],
+                                       "net_income": [SeriesPoint(period_end=d_, value=v) for d_, v in
+                                                      zip(q, [-1e8, 3e8, 3e8, 5.8e8, 1.9e8])]},
+                               freqs={"total_revenue": "quarterly", "net_income": "quarterly"}, currency="USD")
+    out = charts.small_multiples(None, series, ticker="T")
+    texts = [a.text for a in out.fig.layout.annotations]
+    assert "vs year-ago quarter (○): -4%" in texts  # 2.4 vs 2.5, not -33% vs the holiday quarter
+    assert "vs year-ago quarter (○): n/m - year-ago quarter ≤ 0" in texts  # negative year-ago net income
+    assert "same quarter a year earlier" in out.caption

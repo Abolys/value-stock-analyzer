@@ -12,6 +12,8 @@ whose `notes` carry the flags and captions shown beside it.
 
 from __future__ import annotations
 
+import math
+
 from datetime import date, timedelta
 from typing import Iterable
 
@@ -35,6 +37,19 @@ from signals.trap_scores import AltmanResult, BeneishResult, PiotroskiResult
 # No fixed font colour: the Streamlit theme (light or dark) supplies it; exports use plotly_white's ink.
 FONT = dict(family="system-ui, -apple-system, Segoe UI, sans-serif", size=12)
 FUNDAMENTAL_LABELS = {"total_revenue": "Revenue", "net_income": "Net income", "total_debt": "Total debt"}
+SEASONAL_FLOWS = ("total_revenue", "net_income")  # quarterly flows: compared with the same quarter a year earlier
+
+
+def year_ago_point(pts: list, latest) -> object | None:
+    """The quarter about a year before `latest` (4 × QUARTER_GAP_DAYS), or None."""
+    lo, hi = (config.TTM_QUARTERS * d for d in config.QUARTER_GAP_DAYS)
+    return next((p for p in pts if lo <= (latest.period_end - p.period_end).days <= hi), None)
+
+
+def yoy_label(latest_value: float, year_ago_value: float) -> str:
+    if year_ago_value <= 0:
+        return "n/m - year-ago quarter ≤ 0"
+    return f"{latest_value / year_ago_value - 1:+.0%}"
 
 
 class ChartOut(BaseModel):
@@ -162,14 +177,29 @@ def small_multiples(closes: pd.Series | None, series: FundamentalSeries | None,
             hovertemplate=f"%{{x|%Y-%m-%d}} ({freq}): %{{text}}<extra>{label}</extra>"), row=row, col=1)
         if any(p.value < 0 for p in pts):
             fig.add_hline(y=0, line=dict(color=theme.GRID, dash="dot", width=1), row=row, col=1)
+        if freq == "quarterly" and name in SEASONAL_FLOWS and len(pts) > 1:
+            latest = max(pts, key=lambda p: p.period_end)
+            ago = year_ago_point(pts, latest)
+            if ago is not None:  # seasonal businesses: compare like with like, not with the previous quarter
+                fig.add_trace(go.Scatter(
+                    x=[pd.Timestamp(ago.period_end)], y=[ago.value], mode="markers", showlegend=False,
+                    marker=dict(size=16, color="rgba(0,0,0,0)", line=dict(width=2, color=theme.REF_LINE)),
+                    hovertemplate=f"same quarter a year earlier<extra>{label}</extra>"), row=row, col=1)
+                fig.add_annotation(x=pd.Timestamp(latest.period_end), y=latest.value, row=row, col=1,
+                                   text=f"vs year-ago quarter (○): {yoy_label(latest.value, ago.value)}",
+                                   showarrow=True, arrowhead=0, ax=-60, ay=-22, font=dict(size=11))
+            else:
+                notes.append(f"{label}: no quarter a year before the latest one to compare with")
         if freq != "quarterly":
             notes.append(f"{label}: fiscal-year values (no quarterly data)")
     notes.insert(0, f"Price: {price_note}. Fundamentals at their period ends, each panel on its own scale "
-                    f"({series.currency or 'trading currency'}); none indexed. yfinance gives about 5 quarters.")
+                    f"({series.currency or 'trading currency'}); none indexed. yfinance gives about 5 quarters. "
+                    "Quarterly revenue and net income are often seasonal: the latest quarter is compared with "
+                    "the same quarter a year earlier (○), not with the one before it.")
     if trades:
         notes.append("▲ open-market buys, ▼ sales (hollow = 10b5-1 plan), sized by value")
     _base(fig, 620, showlegend=bool(trades), legend=dict(orientation="h", y=-0.05))
-    for a in fig.layout.annotations[:4]:
+    for a in fig.layout.annotations[:4]:  # the four subplot titles
         a.update(font=dict(size=12), xanchor="left", x=0)
     return ChartOut(fig=fig, title="Fundamentals over time", excluded=excluded, notes=notes)
 
@@ -313,6 +343,9 @@ def heat_class(value: float, price: float) -> str:
 
 
 def sensitivity_heatmap(grid: SensitivityGrid | None, price: Datum, reverse: ReverseDcf | None = None) -> ChartOut | None:
+    """Fair value per cell with its upside vs the actual latest price. Colour is diverging around the
+    price on a log scale (a doubling and a halving are equally strong), stretched to this grid's own
+    extremes, so the shades still separate the cells when every one of them sits on the same side."""
     if grid is None or not grid.values or not price.ok:
         return None
     z, text, classes, excluded = [], [], [], []
@@ -320,25 +353,27 @@ def sensitivity_heatmap(grid: SensitivityGrid | None, price: Datum, reverse: Rev
         zr, tr, cr = [], [], []
         for j, g in enumerate(grid.growths):
             v = grid.values[i][j]
-            if v is None:
+            if v is None or v <= 0:
                 zr.append(None)
-                tr.append("N/A")
+                tr.append("N/A" if v is None else f"{v:,.2f}")
                 cr.append("n/a")
-                excluded.append(f"rate {rate:.1%}, growth {g:+.1%}: not computable")
+                excluded.append(f"rate {rate:.1%}, growth {g:+.1%}: "
+                                + ("not computable" if v is None else "fair value ≤ 0"))
                 continue
             c = heat_class(v, price.value)
-            rel = v / price.value - 1
-            zr.append(0.0 if c == "neutral" else max(-1.0, min(1.0, rel)))
-            tr.append(f"{v:,.2f}")
+            zr.append(0.0 if c == "neutral" else math.log(v / price.value))
+            tr.append(f"{v:,.2f}<br>{v / price.value - 1:+.0%}")
             cr.append(c)
         z.append(zr)
         text.append(tr)
         classes.append(cr)
     band = config.HEATMAP_NEUTRAL_BAND
+    extent = max([abs(v) for row in z for v in row if v is not None] + [math.log(1 + band) * 2])
+    nb = math.log(1 + band) / extent / 2  # the neutral band's half-width on the 0–1 colour scale
     fig = go.Figure(go.Heatmap(
-        x=grid.growths, y=grid.rates, z=z, text=text, texttemplate="%{text}", zmin=-1, zmax=1, zmid=0,
-        colorscale=[[0.0, theme.DIVERGING_BELOW], [0.5 - band / 2, "#f3c6c5"], [0.5, theme.DIVERGING_MID],
-                    [0.5 + band / 2, "#c6dbf5"], [1.0, theme.DIVERGING_ABOVE]],
+        x=grid.growths, y=grid.rates, z=z, text=text, texttemplate="%{text}", zmin=-extent, zmax=extent, zmid=0,
+        colorscale=[[0.0, theme.DIVERGING_BELOW], [0.5 - nb, "#f3c6c5"], [0.5, theme.DIVERGING_MID],
+                    [0.5 + nb, "#c6dbf5"], [1.0, theme.DIVERGING_ABOVE]],
         showscale=False, customdata=classes, xgap=2, ygap=2,
         hovertemplate="discount rate %{y:.1%}, growth %{x:+.1%}: fair value %{text} (%{customdata})<extra></extra>"))
     ci, cj = len(grid.rates) // 2, len(grid.growths) // 2
@@ -346,18 +381,24 @@ def sensitivity_heatmap(grid: SensitivityGrid | None, price: Datum, reverse: Rev
     dy = (grid.rates[1] - grid.rates[0]) / 2 if len(grid.rates) > 1 else 0.005
     fig.add_shape(type="rect", x0=grid.growths[cj] - dx, x1=grid.growths[cj] + dx, y0=grid.rates[ci] - dy,
                   y1=grid.rates[ci] + dy, line=dict(color="#0b0b0b", width=3), name="base case")
-    notes = [f"Fair value per share; blue above the actual price {price.value:,.2f}, red below, grey within "
-             f"±{band:.0%}; outlined = base case"]
+    notes = [f"Fair value per share and upside vs the actual price {price.value:,.2f}; blue above, red below, grey "
+             f"within ±{band:.0%}; shade scaled to this grid's range; outlined = base case"]
     if reverse is not None and reverse.status == "ok" and reverse.implied_growth is not None:
         g = reverse.implied_growth
         if grid.growths[0] - dx <= g <= grid.growths[-1] + dx:
             fig.add_vline(x=g, line=dict(color=theme.MARKER, dash="dash", width=1.5),
                           annotation_text=f"price implies {g:+.1%}", annotation_position="top")
         else:
-            notes.append(f"reverse-DCF growth {g:+.1%}/yr lies outside the grid")
+            left = g < grid.growths[0]
+            fig.add_annotation(x=grid.growths[0] - dx if left else grid.growths[-1] + dx, y=1.0, yref="paper",
+                               xanchor="left" if left else "right", yanchor="bottom", showarrow=False,
+                               text=f"{'◀' if left else ''} price implies {g:+.1%}/yr {'' if left else '▶'}",
+                               font=dict(color=theme.MARKER))
+            notes.append(f"reverse-DCF growth {g:+.1%}/yr lies outside the grid "
+                         f"({'below' if left else 'above'} its {'lowest' if left else 'highest'} growth)")
     elif reverse is not None:
         notes.append(f"reverse DCF: {reverse.status}")
-    _base(fig, 300, xaxis_title="Stage-1 growth", yaxis_title="Discount rate")
+    _base(fig, 320, xaxis_title="Stage-1 growth", yaxis_title="Discount rate")
     fig.update_xaxes(tickformat="+.1%", tickvals=grid.growths)
     fig.update_yaxes(tickformat=".0%", tickvals=grid.rates, autorange="reversed")
     return ChartOut(fig=fig, title="Fair value sensitivity", excluded=excluded, notes=notes)
@@ -409,12 +450,20 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
     fig = make_subplots(rows=3, cols=1, vertical_spacing=0.3,
                         subplot_titles=["Piotroski F-score (0–9)", "Altman Z''", "Beneish M-score"])
     notes, excluded = [], []
-    # Piotroski
+    # Piotroski: weak / middle / strong bands shaded like the Altman zones (PIOTROSKI_WEAK / _STRONG)
+    weak, strong = config.PIOTROSKI_WEAK, config.PIOTROSKI_STRONG
+    for x0, x1, colour in ((0, weak + 0.5, theme.CRITICAL), (weak + 0.5, strong - 0.5, theme.WARNING),
+                           (strong - 0.5, 9.9, theme.GOOD)):
+        fig.add_shape(type="rect", x0=x0, x1=x1, y0=-0.25, y1=0.25, fillcolor=colour, opacity=0.2,
+                      line=dict(width=0), row=1, col=1)
     if pio is not None and pio.status == "ok" and pio.score is not None:
-        fig.add_trace(go.Bar(x=[pio.score], y=[0], orientation="h", marker=dict(color=theme.PRIMARY), width=0.5,
-                             text=[f"{pio.score} / 9 ({pio.available} of 9 checks)"], textposition="outside",
-                             hovertemplate="Piotroski %{x} / 9<extra></extra>"), row=1, col=1)
-        notes.append(f"Piotroski {pio.score} / 9 ({pio.available} of 9 checks available)")
+        fig.add_trace(go.Scatter(x=[pio.score], y=[0], mode="markers+text",
+                                 text=[f"{pio.score} / 9 ({pio.available} of 9 checks)"],
+                                 textposition="middle right" if pio.score < 5 else "middle left",
+                                 marker=dict(symbol="line-ns", size=20, line=dict(width=3, color=theme.MARKER)),
+                                 hovertemplate="Piotroski %{x} / 9<extra></extra>"), row=1, col=1)
+        notes.append(f"Piotroski {pio.score} / 9 ({pio.available} of 9 checks available; weak ≤ {weak}, "
+                     f"strong ≥ {strong})")
     else:
         why = pio.status if pio is not None else "N/A - Data Incomplete"
         excluded.append(f"Piotroski: {why}")
@@ -445,11 +494,15 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
     thr = config.BENEISH_THRESHOLD
     m = beneish.m.value if beneish is not None and beneish.m.ok else None
     bmin, bmax = min(-4.0, (m or 0) - 0.5), max(0.0, (m or 0) + 0.5)
+    fig.add_shape(type="rect", x0=thr, x1=bmax, y0=-0.25, y1=0.25, fillcolor=theme.CRITICAL, opacity=0.2,
+                  line=dict(width=0), row=3, col=1)  # the "possible manipulation" side
+    below = m is None or m < thr  # put the two labels on opposite sides of the threshold line
     fig.add_vline(x=thr, line=dict(color=theme.CRITICAL, width=2), row=3, col=1, exclude_empty_subplots=False,
-                  annotation_text=f"threshold {thr}", annotation_position="top right")
+                  annotation_text=f"flag above {thr}", annotation_position="top right" if below else "top left")
     if m is not None:
         fig.add_trace(go.Scatter(x=[m], y=[0], mode="markers+text",
-                                 text=[f"{m:.2f} · {'flag' if beneish.flag else 'no flag'}"], textposition="middle right" if m < (bmin + bmax) / 2 else "middle left",
+                                 text=[f"{m:.2f} · {'flag' if beneish.flag else 'no flag'}"],
+                                 textposition="middle left" if below else "middle right",
                                  marker=dict(symbol="line-ns", size=20, line=dict(width=3, color=theme.MARKER)),
                                  hovertemplate="Beneish M %{x:.2f}<extra></extra>"), row=3, col=1)
         notes.append(f"Beneish M {m:.2f} (flag above {thr}; " + ("flagged" if beneish.flag else "no flag") + ")")
@@ -600,6 +653,12 @@ class ScatterPoint(BaseModel):
     quality: float
     quality_display: str = ""
     label: bool = False
+    status: str = "Pass"  # screen status, shown by the marker's shape (colour stays the ticker's)
+
+
+# Marker shape per screen status (colour is the ticker's identity colour everywhere, SPEC "Charts").
+STATUS_SYMBOLS = {"Pass": "circle", "Incomplete": "circle-open", "Fail": "x-thin-open"}
+STATUS_SYMBOL_LEGEND = "● Pass · ○ Incomplete · ✕ Fail"
 
 
 def group_excluded(excluded: list[str], limit: int = config.CHANGES_LIST_MAX) -> list[str]:
@@ -619,21 +678,31 @@ def group_excluded(excluded: list[str], limit: int = config.CHANGES_LIST_MAX) ->
 def screener_scatter(points: list[ScatterPoint], excluded: list[str]) -> ChartOut:
     fig = go.Figure()
     if points:
+        # Labels alternate above and below in margin-of-safety order, so neighbours don't print over each other.
+        order = {id(p): k for k, p in enumerate(sorted(points, key=lambda p: p.mos))}
         fig.add_trace(go.Scatter(
             x=[p.mos for p in points], y=[p.quality for p in points], mode="markers+text",
-            text=[p.ticker if p.label else "" for p in points], textposition="top center",
-            customdata=[[p.ticker, p.name, p.quality_display] for p in points],
+            text=[p.ticker if p.label else "" for p in points],
+            textposition=["top center" if order[id(p)] % 2 == 0 else "bottom center" for p in points],
+            customdata=[[p.ticker, p.name, p.quality_display, p.status] for p in points],
             marker=dict(size=11, color=[theme.ticker_color(p.ticker) for p in points],
-                        line=dict(width=2, color="white")),
+                        symbol=[STATUS_SYMBOLS.get(p.status, "circle") for p in points],
+                        opacity=[1.0 if p.status == "Pass" else 0.55 for p in points],
+                        line=dict(width=2, color=[theme.ticker_color(p.ticker) if p.status != "Pass" else "white"
+                                                  for p in points])),
             hovertemplate="%{customdata[0]} — %{customdata[1]}<br>Margin of safety %{x:+.0%}"
-                          "<br>Quality %{customdata[2]}<extra></extra>"))
+                          "<br>Quality %{customdata[2]}<br>%{customdata[3]}<extra></extra>"))
     fig.add_vline(x=0, line=dict(color=theme.GRID, dash="dash", width=1))
-    _base(fig, 380, showlegend=False, xaxis_title="Margin of safety (Graham Number vs price)",
+    hurdle = config.MIN_MARGIN_OF_SAFETY
+    fig.add_vline(x=hurdle, line=dict(color=theme.REF_LINE, dash="dot", width=1.5),
+                  annotation_text=f"pass ≥ {hurdle:.0%}", annotation_position="top right")
+    _base(fig, 400, showlegend=False, xaxis_title="Margin of safety (Graham Number vs price)",
           yaxis_title="Quality score (0–10)")
     fig.update_xaxes(tickformat=".0%")
-    fig.update_yaxes(range=[0, 10.5])
+    fig.update_yaxes(range=[0, 11], tickvals=list(range(0, 11, 2)))  # headroom so labels at 10 aren't clipped
     notes = [f"{len(points)} tickers; labels on the top {config.SCATTER_LABEL_TOP_N} by quality rank + margin-of-safety "
-             "rank; click a point to open it"]
+             f"rank; {STATUS_SYMBOL_LEGEND}; dotted line = the margin-of-safety pass mark "
+             f"(MIN_MARGIN_OF_SAFETY {hurdle:.0%}); click a point to open it"]
     return ChartOut(fig=fig, title="Margin of safety vs quality", excluded=group_excluded(excluded), notes=notes)
 
 

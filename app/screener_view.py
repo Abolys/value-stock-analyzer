@@ -286,7 +286,7 @@ def scatter_points(results: list[ScreenResult], top_n: int = config.SCATTER_LABE
         if r.quality is None or r.quality.score is None:
             excluded.append(f"{r.ticker}: quality {r.quality.display if r.quality else 'N/A - Data Incomplete'}")
             continue
-        pts.append(ScatterPoint(ticker=r.ticker, name=r.name, mos=m.value.value, quality=r.quality.score,
+        pts.append(ScatterPoint(ticker=r.ticker, name=r.name, mos=m.value.value, quality=r.quality.score, status=r.status,
                                 quality_display=r.quality.display))
     if pts:
         df = pd.DataFrame([{"q": p.quality, "m": p.mos} for p in pts])
