@@ -217,6 +217,8 @@ MIGRATIONS = [
     ("analysis_runs", "episode_high_date", "TEXT"),
     ("analysis_runs", "input_tokens", "INTEGER DEFAULT 0"),
     ("analysis_runs", "output_tokens", "INTEGER DEFAULT 0"),
+    # Phase 6 follow-up: a holding is a stock (thesis, snapshot, alerts) or cash (a cash-like deposit).
+    ("holdings", "kind", "TEXT NOT NULL DEFAULT 'stock'"),
 ]
 
 

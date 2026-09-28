@@ -127,3 +127,20 @@ def test_then_vs_now_reports_changed_scores_by_direction():
     assert rows["net_debt_ebitda"].change == WORSE  # lower is better: 2.1 → 2.9 is worse
     assert rows["price"].change == "changed"  # neutral direction
     assert rows["aggregate_score"].change == NA_CHANGE and rows["aggregate_score"].now.startswith("N/A")
+
+
+def test_default_levels_explain_a_runway_company_has_no_fair_value():
+    from analysis.macro import macro_lens
+    from analysis.pipeline import view_run
+    from analysis.quant import quant_lens
+    from portfolio.thesis import default_levels
+    from tests.analysis_helpers import make_inputs
+    from tests.screen_helpers import make_fundamentals
+
+    burning = make_fundamentals({"free_cash_flow": (-100, -80), "operating_cash_flow": (-60, -40),
+                                 "diluted_eps": (-1.0, -0.8), "net_income": (-100, -80)})
+    x = make_inputs(burning)
+    run = view_run(x)
+    run.quant, run.macro = quant_lens(x), macro_lens(x)
+    lv = default_levels(run)
+    assert lv["intrinsic_value"] is None and "cash-runway method" in lv["basis"] and "(ok)" not in lv["basis"]

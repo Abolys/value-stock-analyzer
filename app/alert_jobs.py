@@ -58,7 +58,8 @@ def launch(source: str = "app_start", tickers: list[str] | None = None, db_path=
 def anything_to_check(db_path=None) -> bool:
     from portfolio.alerts import watchlist_tickers
 
-    return bool(store.list_holdings(path=db_path) or store.watch_levels(db_path) or watchlist_tickers())
+    stocks = [h for h in store.list_holdings(path=db_path) if not h.is_cash]
+    return bool(stocks or store.watch_levels(db_path) or watchlist_tickers())
 
 
 def maybe_start(db_path=None) -> bool:

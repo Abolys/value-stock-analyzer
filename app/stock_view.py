@@ -36,6 +36,8 @@ class Tag(BaseModel):
 def verdict_badge(agg: AggregateResult | None) -> str:
     if agg is None:
         return "Verdict pending"
+    if agg.not_applicable:
+        return agg.not_applicable
     if agg.score is None:
         return f"Insufficient data — 0 of {agg.lenses_total} lenses"
     return f"{agg.score:.1f} / 10 — {agg.verdict} · {agg.lenses_used} of {agg.lenses_total} lenses"
@@ -96,7 +98,7 @@ def held_tags(ticker: str, db_path=None) -> list[Tag]:
     out = []
     for h in store.list_holdings(ticker=ticker, path=db_path):
         unread = store.unread_count(ticker, db_path)
-        out.append(Tag(text=f"Held ({h.account})", kind="success",
+        out.append(Tag(text=f"Held ({h.account}{' · cash deposit' if h.is_cash else ''})", kind="success",
                        tip=f"first bought {h.first_buy}; {unread} unread alert(s); see the Portfolio page"))
     return out
 

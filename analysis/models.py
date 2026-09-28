@@ -159,9 +159,12 @@ class AggregateResult(BaseModel):
     controversy: bool = False
     controversy_gap: float | None = None  # mean of the other lenses − Devil's Advocate
     rationale: str = ""
+    not_applicable: str = ""  # why no verdict applies at all (e.g. a fund), else ""
 
     @property
     def display(self) -> str:
+        if self.not_applicable:
+            return self.not_applicable
         if self.score is None:
             return f"{INSUFFICIENT} (0 of {self.lenses_total} lenses)"
         return f"{self.score:.1f} ({self.lenses_used} of {self.lenses_total} lenses)"
@@ -207,6 +210,7 @@ class AnalysisRun(BaseModel):
     industry: str | None = None
     treatment: str = ""
     sector_adjusted: bool = False
+    fund: bool = False  # an ETF or mutual fund (FUND_QUOTE_TYPES): price-based view only, no lenses
     currency: str | None = None
     price_as_of: date | None = None
     fundamentals_label: str = ""  # e.g. "TTM to 2026-06-30 (4 quarters)" or "annual, not TTM (...)"

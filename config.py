@@ -442,6 +442,10 @@ FIELD_NA_SPIKE = 0.8
 # Sector handling (Rule 5)
 # --------------------------------------------------------------------------
 SECTOR_ADJUSTED_SECTORS = ["Financial Services", "Real Estate"]
+# Funds (yfinance quoteType): the four lenses and the screen are built for individual companies, so a
+# fund gets the price-based view only (price, 52-week range, drawdowns and recovery, dividends, return
+# vs its benchmark) and no lens scores or LLM calls.
+FUND_QUOTE_TYPES = ["ETF", "MUTUALFUND"]
 # Matched by prefix on the yfinance industry string (verified 2026-09:
 # JPM "Banks - Diversified", O "REIT - Retail").
 SUBSECTOR_RULES = [

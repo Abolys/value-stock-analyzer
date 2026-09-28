@@ -10,6 +10,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 BUY, SELL = "buy", "sell"
+# A holding's kind: a stock (a value-stock position) carries a thesis, a snapshot, sell triggers and
+# alerts; cash is where money is parked until an opportunity comes (e.g. a bank or money-market ETF): its
+# performance is tracked (value, gain/loss, return vs benchmark) and it can be analysed on the Stock page,
+# but it has no thesis or alerts and is totalled separately from the value stocks.
+KIND_STOCK, KIND_CASH = "stock", "cash"
+KIND_LABELS = {KIND_STOCK: "stock", KIND_CASH: "cash deposit"}
 
 # Trigger states. "can't evaluate" carries the N/A or n/m reason of the current value.
 FIRED, NEAR, OK_STATE, UNKNOWN = "fired", "near", "ok", "can't evaluate"
@@ -78,7 +84,12 @@ class Holding(BaseModel):
     snapshot_analysis_id: int | None = None
     snapshot: dict[str, "Metric"] = Field(default_factory=dict)
     closed: bool = False
+    kind: str = "stock"  # KIND_STOCK | KIND_CASH
     transactions: list[Transaction] = Field(default_factory=list)
+
+    @property
+    def is_cash(self) -> bool:
+        return self.kind == KIND_CASH
     thesis: Thesis | None = None
 
     @property

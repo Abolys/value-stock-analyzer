@@ -43,7 +43,18 @@ def default_levels(run: AnalysisRun) -> dict:
         iv, basis = q.graham.value, (f"Graham Number (DCF {q.dcf.status if q.dcf else 'not run'}; "
                                      f"analysis {run.analysis_id}, {run.today})")
     else:
-        why = (q.dcf.status if q is not None and q.dcf is not None else q.status if q is not None else "Quant lens not run")
+        if q is None:
+            why = "Quant lens not run"
+        elif run.fund:
+            why = "a fund has no company fair value"
+        elif q.dcf is not None and not q.dcf.ok:
+            why = q.dcf.status
+        elif q.method == "runway":
+            why = "cash-runway method (FCF-negative or unstable FCF base): no DCF or Graham fair value"
+        elif not q.ok:
+            why = q.status
+        else:
+            why = f"no fair value from the {q.method or 'Quant'} method"
         basis = f"No fair value from the analysis ({why}); enter your own"
     bb = iv * (1 - config.MIN_MARGIN_OF_SAFETY) if iv is not None else None
     return {"intrinsic_value": iv, "buy_below_price": bb, "target_price": iv, "basis": basis}

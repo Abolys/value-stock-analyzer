@@ -173,3 +173,23 @@ def test_add_to_portfolio_from_the_stock_page_prefills_and_saves_the_snapshot(of
     assert [t.text for t in h.thesis.triggers] == ["piotroski < 5"]
     assert [r.text for r in h.thesis.reasons] == ["Brand intact", "Net cash"]
     assert h.thesis.buy_below_price == pytest.approx(bb)
+
+
+def test_cash_deposit_row_on_the_portfolio_page(provider, monkeypatch):
+    from portfolio import alerts as pa
+    from portfolio.models import KIND_CASH
+
+    monkeypatch.setattr(pa, "watchlist_tickers", lambda: [])
+    hid = _hold_lulu()
+    store.set_kind(hid, KIND_CASH)
+    at = AppTest.from_function(_portfolio_page, args=(provider,), default_timeout=120)
+    at.run()
+    assert not at.exception
+    holdings = next(df.value for df in at.dataframe if "Triggers" in df.value.columns)
+    row = holdings.iloc[0]
+    assert row["Ticker"] == "LULU" and row["Type"] == "Cash deposit" and row["Triggers"] == "— (cash deposit)"
+    assert "vs SPY" in row["vs index"] or row["vs index"].startswith("N/A")  # performance still checked
+    assert any("is parked cash" in c.value for c in at.caption)
+    totals = next(df.value for df in at.dataframe if "Cost basis" in df.value.columns)
+    assert list(totals["Type"]) == ["Cash deposits"]
+    assert not any("At purchase" in df.value.columns for df in at.dataframe)  # no then vs now

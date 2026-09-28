@@ -70,6 +70,10 @@ def position_for(provider, h: Holding) -> PositionSummary:
 def build_view(provider, h: Holding, db_path=None) -> HoldingView:
     """Position, thesis check and unread alerts for one holding. The thesis check uses the
     same actual latest price as the position (in the trading currency, like the thesis levels)."""
+    if h.is_cash:
+        return HoldingView(holding=h, position=position_for(provider, h), check=ThesisCheck(holding_id=h.holding_id or 0,
+                           ticker=h.ticker, now_source="cash deposit"), unread=store.unread_count(h.ticker, db_path),
+                           now_label="cash deposit")
     metrics, label = pa.now_metrics(h.ticker, db_path)
     price = prices.actual_latest_price(provider, h.ticker)
     if price.ok:
@@ -99,14 +103,15 @@ def holdings_frame(views: list[HoldingView]) -> tuple[pd.DataFrame, pd.DataFrame
         h, p, c = v.holding, v.position, v.check
         ok = p.status == "ok"
         rows.append({
-            "Ticker": h.ticker, "Account": h.account, "Shares": f"{p.shares:,.4g}",
+            "Ticker": h.ticker, "Type": "Cash deposit" if h.is_cash else "Value stock", "Account": h.account,
+            "Shares": f"{p.shares:,.4g}",
             "Avg cost": _money(p.avg_cost, h.currency),
             "Value": _money(p.market_value, h.currency) if ok else p.status,
             "Gain": _pct(p.total_return) if ok else "N/A",
             "Realised": _money(p.realised, h.currency), "Unrealised": _money(p.unrealised, h.currency) if ok else "N/A",
             "vs index": (f"{_pct(p.vs_benchmark, pts=True)} vs {p.benchmark}" if p.vs_benchmark is not None
                           else f"N/A ({p.benchmark})"),
-            "Triggers": f"{LIGHT_EMOJI[c.light]} {light_label(c.triggers)}",
+            "Triggers": "— (cash deposit)" if h.is_cash else f"{LIGHT_EMOJI[c.light]} {light_label(c.triggers)}",
             "Alerts": f"{v.unread} new" if v.unread else "—",
         })
         states.append({
@@ -127,18 +132,21 @@ def style_states(df: pd.DataFrame, states: pd.DataFrame) -> Styler:
 
 
 def totals_by_currency(views: list[HoldingView]) -> pd.DataFrame:
-    """Totals per currency; amounts in different currencies are never added together."""
-    agg: dict[str, dict[str, float]] = {}
+    """Totals per currency and type (value stocks apart from parked cash); amounts in different currencies
+    are never added together."""
+    agg: dict[tuple[str, str], dict[str, float]] = {}
     for v in views:
         p = v.position
         if p.status != "ok" or p.market_value is None:
             continue
-        t = agg.setdefault(v.holding.currency, {"Value": 0.0, "Cost basis": 0.0, "Realised": 0.0, "Unrealised": 0.0})
+        key = (v.holding.currency, "Cash deposits" if v.holding.is_cash else "Value stocks")
+        t = agg.setdefault(key, {"Value": 0.0, "Cost basis": 0.0, "Realised": 0.0, "Unrealised": 0.0})
         t["Value"] += p.market_value
         t["Cost basis"] += p.cost_basis
         t["Realised"] += p.realised
         t["Unrealised"] += p.unrealised or 0.0
-    return pd.DataFrame([{"Currency": k, **{n: f"{x:,.2f}" for n, x in t.items()}} for k, t in sorted(agg.items())])
+    return pd.DataFrame([{"Currency": c, "Type": kind, **{n: f"{x:,.2f}" for n, x in t.items()}}
+                         for (c, kind), t in sorted(agg.items())])
 
 
 CHANGE_STATE = {BETTER: "pass", WORSE: "fail"}

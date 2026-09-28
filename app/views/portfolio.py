@@ -20,7 +20,7 @@ from app import portfolio_view as pv
 from app.views.thesis_form import trigger_builder
 from portfolio import store
 from portfolio.alerts import watchlist_tickers
-from portfolio.models import BUY, SELL, Transaction
+from portfolio.models import BUY, KIND_CASH, KIND_STOCK, SELL, Transaction
 from portfolio.triggers import TriggerError
 from storage import history
 
@@ -191,6 +191,15 @@ def transactions(v: pv.HoldingView) -> None:
         st.rerun()
 
 
+def kind_toggle(v: pv.HoldingView) -> None:
+    h = v.holding
+    key = f"pf-cash-{h.holding_id}"
+    st.toggle("Cash deposit", value=h.is_cash, key=key,
+              help="Where cash is parked until an opportunity comes: performance still tracked and totalled apart from "
+                   "the value stocks; turning it on removes the analysis snapshot, levels and sell triggers",
+              on_change=lambda: store.set_kind(h.holding_id, KIND_CASH if st.session_state[key] else KIND_STOCK))
+
+
 def inbox() -> None:
     st.subheader("Alerts")
     unread = store.unread_count()
@@ -277,13 +286,20 @@ def render(provider) -> None:
                               key="pf-select")
         st.session_state["portfolio_selected"] = chosen
         v = next(x for x in views if x.holding.holding_id == chosen)
-        left, right = st.columns(2)
-        with left:
-            then_now(v)
-            reasons(v)
-        with right:
-            triggers(v)
+        kind_toggle(v)
+        if v.holding.is_cash:
+            st.caption(f"{v.holding.ticker} is parked cash, totalled apart from your value stocks. Its value, gain/loss "
+                       "and return vs the index are tracked above; open its Stock page for the price-based analysis. "
+                       "No thesis, sell triggers or alerts.")
             journal(v)
+        else:
+            left, right = st.columns(2)
+            with left:
+                then_now(v)
+                reasons(v)
+            with right:
+                triggers(v)
+                journal(v)
         transactions(v)
         with st.expander("Add another holding"):
             t = st.text_input("Ticker", key="pf-add-ticker-2")

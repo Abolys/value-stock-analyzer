@@ -16,7 +16,8 @@ from typing import Any
 import config
 from portfolio import metrics as pm
 from portfolio.models import (
-    SELL, Alert, Holding, JournalEntry, Metric, Reason, Thesis, Transaction, Trigger, WatchLevel,
+    KIND_CASH, KIND_LABELS, KIND_STOCK, SELL, Alert, Holding, JournalEntry, Metric, Reason, Thesis, Transaction, Trigger,
+    WatchLevel,
 )
 from portfolio.triggers import validate_trigger
 from storage.db import connect
@@ -113,6 +114,30 @@ def set_closed(holding_id: int, closed: bool = True, path: Path | str | None = N
         conn.execute("UPDATE holdings SET closed = ? WHERE holding_id = ?", (int(closed), holding_id))
 
 
+def set_kind(holding_id: int, kind: str, path: Path | str | None = None) -> None:
+    """Mark a holding as a value stock or a cash deposit. Cash drops the snapshot, the thesis levels and the
+    sell triggers (parked cash has no value thesis to check); the change is journaled. Reasons are kept."""
+    if kind not in KIND_LABELS:
+        raise ValueError(f"unknown holding kind {kind!r}")
+    h = get_holding(holding_id, path)
+    if h is None or h.kind == kind:
+        return
+    with connect(_db(path)) as conn:
+        conn.execute("UPDATE holdings SET kind = ? WHERE holding_id = ?", (kind, holding_id))
+        if kind == KIND_CASH:
+            conn.execute("UPDATE holdings SET snapshot_json = ?, snapshot_analysis_id = NULL WHERE holding_id = ?",
+                         (json.dumps({}), holding_id))
+            conn.execute("UPDATE theses SET intrinsic_value = NULL, buy_below_price = NULL, target_price = NULL, "
+                         "basis = ? WHERE holding_id = ?", ("cash deposit: no valuation thesis", holding_id))
+            conn.execute("DELETE FROM thesis_triggers WHERE thesis_id IN "
+                         "(SELECT thesis_id FROM theses WHERE holding_id = ?)", (holding_id,))
+    add_journal(holding_id, f"Marked as {KIND_LABELS[kind]}"
+                + (": parked cash, totalled apart from the value stocks; value, gain/loss and return vs benchmark "
+                   "still tracked; analysis snapshot, levels and sell triggers removed; no alerts."
+                   if kind == KIND_CASH else ": add levels and sell triggers, and re-run the analysis "
+                   "on the Stock page for a snapshot."), kind="note", path=path)
+
+
 def _thesis(conn, holding_id: int) -> Thesis | None:
     row = conn.execute("SELECT thesis_id, created_at, intrinsic_value, buy_below_price, target_price, basis "
                        "FROM theses WHERE holding_id = ?", (holding_id,)).fetchone()
@@ -133,7 +158,7 @@ def _thesis(conn, holding_id: int) -> Thesis | None:
                   buy_below_price=row[3], target_price=row[4], basis=row[5] or "", reasons=reasons, triggers=triggers)
 
 
-_HCOLS = "holding_id, ticker, account, currency, created_at, snapshot_analysis_id, snapshot_json, closed"
+_HCOLS = "holding_id, ticker, account, currency, created_at, snapshot_analysis_id, snapshot_json, closed, kind"
 
 
 def _holding(conn, r) -> Holding:
@@ -143,6 +168,7 @@ def _holding(conn, r) -> Holding:
                                   "WHERE holding_id = ? ORDER BY txn_date, txn_id", (r[0],))]
     return Holding(holding_id=r[0], ticker=r[1], account=r[2], currency=r[3], created_at=_dt(r[4]),
                    snapshot_analysis_id=r[5], snapshot=pm.load(json.loads(r[6]) if r[6] else {}), closed=bool(r[7]),
+                   kind=r[8] or KIND_STOCK,
                    transactions=txns, thesis=_thesis(conn, r[0]))
 
 

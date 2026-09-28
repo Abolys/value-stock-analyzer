@@ -226,3 +226,20 @@ def test_last_metrics_feed_the_thesis_check(ctx):
     assert m["moat_score"].status == "N/A - no full analysis yet"
     hj = pa.journal_for("TEST")
     assert hj[0].holding.holding_id == hid and hj[0].check.triggers[0].state == "ok"
+
+
+def test_cash_deposit_holding_drops_its_thesis_and_is_not_monitored(ctx):
+    from portfolio.models import KIND_CASH, KIND_STOCK, Metric
+
+    hid = hold(bb=12.0, tp=9.5, triggers=[Trigger(field="piotroski", op="<", literal=5)],
+               snapshot={"piotroski": Metric(value=9.0, display="9")})
+    store.set_kind(hid, KIND_CASH)
+    h = store.get_holding(hid)
+    assert h.is_cash and h.snapshot == {} and h.snapshot_analysis_id is None
+    assert h.thesis.triggers == [] and h.thesis.buy_below_price is None and h.thesis.target_price is None
+    assert any("Marked as cash deposit" in e.text for e in store.journal(hid))
+    rep = check(ctx, Monitor())  # nothing to monitor: a KeyError here would mean the cash holding was checked
+    assert rep.tickers == [] and rep.fired == []
+    store.set_kind(hid, KIND_STOCK)
+    assert not store.get_holding(hid).is_cash
+    assert "TEST" in check(ctx, Monitor(TEST=crafted()), now=datetime(2026, 2, 16)).tickers

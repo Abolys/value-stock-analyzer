@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import config
 from analysis.models import LENSES, AnalysisRun, DevilsAdvocateResult, LensResult, LLMLensResult, MoatResult, QuantResult
-from analysis.pipeline import run_analysis
+from analysis.pipeline import FUND_NOTE, run_analysis
 from analysis.turnaround import clock_label
 from analysis.turnaround_models import STATUS_WITHHELD
 from app import charts, services, ui
@@ -352,9 +352,26 @@ def draw_inputs(lay: Layout, e: Entry) -> None:
     draw_dividend(lay["dividend"], run, ch)
 
 
+def draw_fund(lay: Layout, run: AnalysisRun) -> None:
+    """A fund has no lens scores: say so where each lens would be, instead of an empty result."""
+    note = f"**{run.ticker} is a fund.** {FUND_NOTE[0].upper() + FUND_NOTE[1:]}."
+    lay["dots"].info(note)
+    lay["valuation"].caption("Not applicable to a fund (no company DCF or Graham Number).")
+    for n in LENSES:
+        lay[n].caption("Not applicable to a fund.")
+
+
 def draw_all(lay: Layout, e: Entry, provider) -> None:
     run = e.run
     draw_inputs(lay, e)
+    if run.fund:
+        draw_fund(lay, run)
+        draw_turnaround(lay["turnaround"], run, e.charts)
+        draw_turnaround_details(lay["turnaround_tab"], run)
+        draw_history(lay["history"], run, e.bundle)
+        draw_raw(lay["raw"], provider, run.ticker)
+        draw_export(lay["export"], run, e.charts)
+        return
     draw_valuation(lay["valuation"], run, e.charts)
     for n in LENSES:
         draw_lens(lay[n], run.lens(n))
@@ -437,6 +454,8 @@ def run_progressive(provider, ticker: str, lay: Layout, llm: LLMClient, use_edga
         st.warning(note)
     for err in run.errors:
         st.error(f"Lens error: {err}")
+    if run.fund:
+        draw_fund(lay, run)
     draw_history(lay["history"], run, e.bundle)
     draw_raw(lay["raw"], provider, ticker)
     draw_export(lay["export"], run, e.charts)

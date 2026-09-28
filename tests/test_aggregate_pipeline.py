@@ -118,3 +118,22 @@ def test_unknown_ticker_fails_to_load_cleanly(tmp_path, fx_provider):
     llm = LLMClient(api=FakeAPI(), cache=LLMCache(tmp_path / "c.db"), db_path=db)
     run = run_analysis(ScreenContext(provider=fx_provider, db_path=db), "NOPE", llm=llm)
     assert run.load_error and run.quant is None
+
+
+def test_a_fund_gets_the_price_based_view_without_lenses_or_llm_calls(fx_provider, tmp_path):
+    from analysis.pipeline import FUND_VERDICT, run_analysis
+    from data.fixture_provider import captured_on
+    from llm.cache import LLMCache
+    from llm.client import LLMClient
+    from screening.engine import ScreenContext
+    from tests.llm_fakes import FakeAPI
+
+    api = FakeAPI()
+    llm = LLMClient(api=api, cache=LLMCache(tmp_path / "c.db"), db_path=tmp_path / "r.db")
+    run = run_analysis(ScreenContext(provider=fx_provider, db_path=tmp_path / "r.db", today=captured_on("SPY")), "SPY",
+                       llm=llm)
+    assert not run.load_error, run.load_error
+    assert run.fund and api.requests == []  # no Moat / Devil's Advocate calls for a fund
+    assert all(run.lens(n) is None for n in ("quant", "macro", "moat", "devils_advocate"))
+    assert run.aggregate.display == FUND_VERDICT
+    assert run.turnaround is not None and run.week52 is not None  # the price-based view still runs

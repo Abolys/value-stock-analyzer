@@ -230,7 +230,7 @@ def check_alerts(ctx, source: str, llm=None, edgar=None, monitor: Monitor = moni
     """Evaluate alerts for every holding and watchlist ticker (or just `tickers`)."""
     now = now or datetime.now()
     path = ctx.db_path
-    holdings = store.list_holdings(path=path)
+    holdings = [h for h in store.list_holdings(path=path) if not h.is_cash]  # a cash deposit has nothing to watch
     watch = store.watch_levels(path)
     universe = sorted({h.ticker for h in holdings} | set(watchlist_tickers()) | set(watch))
     todo = [t.upper() for t in tickers] if tickers else universe

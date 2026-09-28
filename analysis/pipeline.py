@@ -22,8 +22,9 @@ from analysis.aggregate import aggregate
 from analysis.devils_advocate import devils_advocate_lens
 from analysis.inputs import AnalysisInputs, AnalysisLoadError, fundamental_series, load_inputs
 from analysis.macro import macro_lens
+import config
 from analysis.models import (
-    AnalysisRun, DevilsAdvocateResult, LensResult, MacroResult, MoatResult, QuantResult, insufficient,
+    AggregateResult, AnalysisRun, DevilsAdvocateResult, LensResult, MacroResult, MoatResult, QuantResult, insufficient,
 )
 from analysis.moat import moat_lens
 from analysis.quant import quant_lens
@@ -41,6 +42,15 @@ log = logging.getLogger(__name__)
 
 OnResult = Callable[[str, Any], None]
 RESULT_TYPES = {"quant": QuantResult, "macro": MacroResult, "moat": MoatResult, "devils_advocate": DevilsAdvocateResult}
+
+
+FUND_VERDICT = "Not applicable (fund)"
+FUND_NOTE = ("an ETF or fund: the four lenses and the screen are built for individual companies, so only the "
+             "price-based view applies (price, 52-week range, drawdowns and recovery, dividends, return vs benchmark)")
+
+
+def is_fund(x: AnalysisInputs) -> bool:
+    return (x.info.get("quote_type") or "").upper() in config.FUND_QUOTE_TYPES
 
 
 def _failed(name: str, exc: BaseException) -> LensResult:
@@ -149,7 +159,16 @@ def run_analysis(ctx: ScreenContext, ticker: str, llm: LLMClient | None = None, 
     base = view_run(x, ctx.provider, llm.analysis_id)
     if on_result:
         on_result("inputs", base)
-    run = run_lenses(x, llm, on_result, lenses, base=base)
+    if is_fund(x):
+        run = base
+        run.fund = True
+        run.aggregate = AggregateResult(not_applicable=FUND_VERDICT, verdict=FUND_VERDICT,
+                                        rationale=f"**{FUND_VERDICT}**: {FUND_NOTE}")
+        run.notes.append(FUND_NOTE)
+        if on_result:
+            on_result("aggregate", run.aggregate)
+    else:
+        run = run_lenses(x, llm, on_result, lenses, base=base)
     run.turnaround = run_turnaround(ctx, x, run)
     if on_result:
         on_result("turnaround", run.turnaround)
