@@ -1,10 +1,12 @@
 """Who is using the app, for sharing it with a link (scripts/share.py).
 
 - On this machine (no proxy headers): the owner, no login, exactly as before.
-- Through the share tunnel: a login. APP_OWNER_PASSWORD gives full access; APP_VIEWER_PASSWORD gives
-  read-only access: every page can be browsed, but nothing is edited, no screen or alert check is
-  started, and the LLM lenses use cached answers only (no calls on the owner's API key or Claude
-  subscription). With no passwords set, remote requests are refused.
+- Through the share tunnel or on Streamlit Cloud: a login. APP_OWNER_PASSWORD gives full access;
+  APP_VIEWER_PASSWORD gives read-only access: every page can be browsed, but nothing is edited, no
+  screen or alert check is started, and the LLM lenses use cached answers only (no calls on the
+  owner's API key or Claude subscription). With no passwords set, remote requests are refused.
+  The passwords are read from .env / the environment, or — when the deploy has no .env (Streamlit
+  Cloud) — from st.secrets, i.e. the Cloud dashboard's settings → secrets.
 
 The role lives in the session; views ask `is_owner()` before showing any control that writes or
 spends. A remote visitor is recognised by the headers the tunnel adds (REMOTE_REQUEST_HEADERS).
@@ -46,6 +48,23 @@ def _check(entered: str, expected: str) -> bool:
     return bool(expected) and hmac.compare_digest(entered.encode(), expected.encode())
 
 
+def _passwords() -> dict[str, str]:
+    """The passwords to check, read at call time: the .env / environment first (the share tunnel),
+    then Streamlit Cloud's secrets (settings → secrets, arriving through st.secrets) — a cloud
+    deploy has no .env file, and Cloud only exposes dashboard secrets that way."""
+    pw = config.app_passwords()
+    for key, value in pw.items():
+        if value:
+            continue
+        try:
+            secret = st.secrets.get(key, "")
+        except Exception:  # no secrets at all (a local run, tests)
+            continue
+        if isinstance(secret, str):
+            pw[key] = secret.strip()
+    return pw
+
+
 def gate() -> str:
     """The session's role; shows the login and stops the page until there is one."""
     if st.session_state.get(ROLE_KEY) is not None:
@@ -53,10 +72,12 @@ def gate() -> str:
     if not is_remote():
         st.session_state[ROLE_KEY] = OWNER
         return OWNER
-    pw = config.app_passwords()
+    pw = _passwords()
     st.title("Value Stock Analyzer")
     if not (pw["APP_OWNER_PASSWORD"] or pw["APP_VIEWER_PASSWORD"]):
-        st.error("Sharing isn't set up on this app (no passwords configured), so remote access is refused.")
+        st.error("Sharing isn't set up on this app (no passwords configured), so remote access is refused. "
+                 "Set APP_OWNER_PASSWORD and/or APP_VIEWER_PASSWORD — in .env for the share tunnel, or in "
+                 "Streamlit Cloud's settings → secrets for a Cloud deploy.")
         st.stop()
     with st.form("login"):
         entered = st.text_input("Password", type="password")
