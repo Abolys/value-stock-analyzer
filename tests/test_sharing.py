@@ -1,6 +1,7 @@
 """Sharing the app with a link: remote visitors must sign in; the viewer password is read-only
 (no edits, no screens or alert checks, no LLM calls, nothing stored); feedback reaches the owner."""
 
+import os
 from datetime import date, datetime
 
 import pytest
@@ -57,11 +58,15 @@ def test_streamlit_cloud_secrets_supply_the_passwords(monkeypatch):
     monkeypatch.delenv("APP_OWNER_PASSWORD", raising=False)
     monkeypatch.delenv("APP_VIEWER_PASSWORD", raising=False)
     monkeypatch.setattr(st, "secrets", {"APP_VIEWER_PASSWORD": "friend-secret"})
-    at = AppTest.from_file("../app/main.py", default_timeout=60)
-    at.run()
-    _sign_in(at, "friend-secret")
-    assert not at.exception
-    assert any(t.value == "Screener" for t in at.title)
+    try:
+        at = AppTest.from_file("../app/main.py", default_timeout=60)
+        at.run()
+        _sign_in(at, "friend-secret")
+        assert not at.exception
+        assert any(t.value == "Screener" for t in at.title)
+    finally:
+        os.environ.pop("APP_OWNER_PASSWORD", None)
+        os.environ.pop("APP_VIEWER_PASSWORD", None)  # the mirror writes through, undo it for the suite
 
 
 def test_env_passwords_win_over_cloud_secrets(monkeypatch):
@@ -74,6 +79,21 @@ def test_env_passwords_win_over_cloud_secrets(monkeypatch):
     _sign_in(at, "friend-secret")
     assert not at.exception
     assert any(t.value == "Screener" for t in at.title)
+
+
+def test_cloud_secrets_are_mirrored_into_the_environment(monkeypatch):
+    # config snapshots its variables at import time, so on Cloud the only way its .env variables
+    # (SEC_USER_AGENT, ANTHROPIC_API_KEY, …) can arrive is the st.secrets → os.environ mirror at
+    # the top of app/main.py; verify it writes (config is already imported in this process, so
+    # only the environment write is observable here)
+    monkeypatch.delenv("SEC_USER_AGENT", raising=False)
+    monkeypatch.setattr(st, "secrets", {"SEC_USER_AGENT": "cloud-agent <x@example.com>"})
+    try:
+        at = AppTest.from_file("../app/main.py", default_timeout=60)
+        at.run()
+        assert os.environ.get("SEC_USER_AGENT") == "cloud-agent <x@example.com>"
+    finally:
+        os.environ.pop("SEC_USER_AGENT", None)  # the mirror writes through, undo it for the suite
 
 
 def test_wrong_password_stays_on_the_login(monkeypatch):

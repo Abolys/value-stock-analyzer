@@ -7,6 +7,7 @@ On start it launches the background alert check for holdings and the watchlist w
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,24 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import streamlit as st  # noqa: E402
+
+
+def _mirror_cloud_secrets() -> None:
+    """On Streamlit Cloud the dashboard's secrets (settings → secrets) reach the app only through
+    st.secrets, never the environment; mirror them into os.environ before config is imported, since
+    config snapshots its variables at import time. Values already in the environment win, so a local
+    .env is unaffected; with no secrets at all (a local run without .streamlit/secrets.toml, tests)
+    this is a no-op."""
+    try:
+        cloud = dict(st.secrets)
+    except Exception:
+        return
+    for key, value in cloud.items():
+        if isinstance(value, str) and not os.environ.get(key):
+            os.environ[key] = value
+
+
+_mirror_cloud_secrets()
 
 import config  # noqa: E402
 from app import alert_jobs, auth, screen_jobs, services, ui  # noqa: E402
