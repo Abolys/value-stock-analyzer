@@ -17,7 +17,7 @@ from screening.models import SLOT_FCF, SLOT_LEVERAGE, SLOT_MOS
 from signals.asset_floor import AssetFloor
 from signals.dcf import ReverseDcf, SensitivityGrid
 from signals.dividends import NO_DIVIDEND, DividendCut, DividendSafety
-from signals.trap_scores import AltmanResult, BeneishResult, PiotroskiResult
+from signals.trap_scores import AltmanResult, BeneishResult, NM_FINANCIALS, PiotroskiResult, nm
 from tests.screen_helpers import run_eval
 
 
@@ -91,6 +91,27 @@ def test_trap_panel_insufficient_piotroski():
         if s.type == "rect":
             rects[s.yref] = rects.get(s.yref, 0) + 1
     assert rects == {"y": 3, "y2": 3, "y3": 1}  # Piotroski bands, Altman zones, Beneish flag side
+
+
+def test_trap_panel_missing_notes_are_pinned_to_their_own_rows():
+    """The 'n/m / N/A' notes for rows without data sit in the top headroom of their OWN row,
+    not on top of the shaded bands or the Beneish threshold vline: per-row domain refs with a
+    top-left anchor, subplot titles untouched."""
+    pio = PiotroskiResult(status=nm(NM_FINANCIALS))
+    alt = AltmanResult(z=Datum.missing(nm(NM_FINANCIALS)))
+    ben = BeneishResult(m=Datum.missing(nm(NM_FINANCIALS)))
+    out = charts.trap_panel(pio, alt, ben)
+    notes = [a for a in out.fig.layout.annotations if "not meaningful" in (a.text or "")]
+    assert [a.xref for a in notes] == ["x domain", "x2 domain", "x3 domain"]
+    assert [a.yref for a in notes] == ["y domain", "y2 domain", "y3 domain"]
+    assert all(a.x == 0 and a.xanchor == "left" and a.y == 1 and a.yanchor == "top" for a in notes)
+    # the Beneish note is anchored at the row's left edge, clear of the threshold vline whose
+    # "flag above …" label occupies the top-right of the line
+    flag = next(a for a in out.fig.layout.annotations if "flag above" in (a.text or ""))
+    assert flag.xref == "x3" and flag.x == config.BENEISH_THRESHOLD
+    # the subplot titles stay untouched
+    titles = out.fig.layout.annotations[:3]
+    assert all(t.xref == "paper" and t.yref == "paper" and t.x == 0 and t.xanchor == "left" for t in titles)
 
 
 def _tx(kind: str, plan: bool = False, value: float = 1e5) -> InsiderTransaction:

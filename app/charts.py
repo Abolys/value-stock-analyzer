@@ -472,8 +472,10 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
     else:
         why = pio.status if pio is not None else "N/A - Data Incomplete"
         excluded.append(f"Piotroski: {why}")
-        fig.add_annotation(text=why, xref="x domain", yref="y domain", x=0.5, y=0.5, showarrow=False,
-                           font=dict(color=theme.MUTED), row=1, col=1)
+        # Pinned to this row's own domain (row/col remap) in its top headroom: the bands occupy the
+        # middle strip, so a mid-row note would sit on top of them.
+        fig.add_annotation(text=why, xref="x domain", yref="y domain", x=0, y=1, showarrow=False,
+                           xanchor="left", yanchor="top", font=dict(color=theme.MUTED), row=1, col=1)
     fig.update_xaxes(range=[0, 9.9], dtick=1, row=1, col=1)
     # Altman: zones shaded
     zlo, zhi = config.ALTMAN_ZONES["distress_below"], config.ALTMAN_ZONES["safe_above"]
@@ -492,8 +494,9 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
     else:
         why = altman.status if altman is not None else "N/A - Data Incomplete"
         excluded.append(f"Altman Z'': {why}")
-        fig.add_annotation(text=why, xref="x domain", yref="y domain", x=0.5, y=0.9, showarrow=False,
-                           font=dict(color=theme.MUTED), row=2, col=1)
+        # Pinned to this row's own domain in its top headroom, above the shaded zones.
+        fig.add_annotation(text=why, xref="x domain", yref="y domain", x=0, y=1, showarrow=False,
+                           xanchor="left", yanchor="top", font=dict(color=theme.MUTED), row=2, col=1)
     fig.update_xaxes(range=[amin, amax], row=2, col=1)
     # Beneish: threshold marked
     thr = config.BENEISH_THRESHOLD
@@ -514,8 +517,11 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
     else:
         why = beneish.status if beneish is not None else "N/A - Data Incomplete"
         excluded.append(f"Beneish: {why}")
-        fig.add_annotation(text=why, xref="x domain", yref="y domain", x=0.5, y=0.9, showarrow=False,
-                           font=dict(color=theme.MUTED), row=3, col=1)
+        # Pinned to this row's own domain in its top headroom, left of the threshold vline: the
+        # "flag above …" label occupies the top-right of the line, so a centred note would be
+        # crossed by the vline.
+        fig.add_annotation(text=why, xref="x domain", yref="y domain", x=0, y=1, showarrow=False,
+                           xanchor="left", yanchor="top", font=dict(color=theme.MUTED), row=3, col=1)
     fig.update_xaxes(range=[bmin, bmax], row=3, col=1)
     notes.append("Beneish is probabilistic; false positives happen.")
     for r in (1, 2, 3):
