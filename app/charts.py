@@ -321,6 +321,13 @@ def peer_strip(me: ScreenResult, peers: list[ScreenResult], source_note: str = "
                                                  line=dict(width=2, color="white")),
                                      hovertemplate=f"{me.ticker}: {_fmt_metric(v, unit)}<extra></extra>"),
                           row=row, col=1)
+        if not xs and v is None:
+            # A subplot with no traces at all is squashed to zero height by the renderer, which
+            # would draw this row's note on top of the row above it; an invisible trace keeps the
+            # row in place. There is nothing to measure, so the row's x axis stays off entirely.
+            fig.add_trace(go.Scatter(x=[], y=[], mode="markers", visible="legendonly", showlegend=False,
+                                     name=f"{label} (no data)"), row=row, col=1)
+            fig.update_xaxes(visible=False, row=row, col=1)
         fig.update_yaxes(visible=False, range=[-1, 1.2], row=row, col=1)
         if unit == "%":
             fig.update_xaxes(tickformat=".0%", row=row, col=1)
@@ -452,7 +459,9 @@ def asset_floor_panel(af: AssetFloor | None, market_cap: Datum, currency: str | 
 # Trap scores
 # --------------------------------------------------------------------------
 def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish: BeneishResult | None) -> ChartOut:
-    fig = make_subplots(rows=3, cols=1, vertical_spacing=0.3,
+    # Tighter spacing: the n/m notes sit in each row's top headroom and need a tall enough row
+    # to stay above the shaded bands.
+    fig = make_subplots(rows=3, cols=1, vertical_spacing=0.15,
                         subplot_titles=["Piotroski F-score (0–9)", "Altman Z''", "Beneish M-score"])
     notes, excluded = [], []
     # Piotroski: weak / middle / strong bands shaded like the Altman zones (PIOTROSKI_WEAK / _STRONG)
@@ -505,8 +514,10 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
     fig.add_shape(type="rect", x0=thr, x1=bmax, y0=-0.25, y1=0.25, fillcolor=theme.CRITICAL, opacity=0.2,
                   line=dict(width=0), row=3, col=1)  # the "possible manipulation" side
     below = m is None or m < thr  # put the two labels on opposite sides of the threshold line
+    # without an M value the note takes the row's top, so the flag label drops to the line's foot
+    flag_pos = "bottom right" if m is None else "top right" if m < thr else "top left"
     fig.add_vline(x=thr, line=dict(color=theme.CRITICAL, width=2), row=3, col=1, exclude_empty_subplots=False,
-                  annotation_text=f"flag above {thr}", annotation_position="top right" if below else "top left")
+                  annotation_text=f"flag above {thr}", annotation_position=flag_pos)
     if m is not None:
         fig.add_trace(go.Scatter(x=[m], y=[0], mode="markers+text",
                                  text=[f"{m:.2f} · {'flag' if beneish.flag else 'no flag'}"],
@@ -517,9 +528,8 @@ def trap_panel(pio: PiotroskiResult | None, altman: AltmanResult | None, beneish
     else:
         why = beneish.status if beneish is not None else "N/A - Data Incomplete"
         excluded.append(f"Beneish: {why}")
-        # Pinned to this row's own domain in its top headroom, left of the threshold vline: the
-        # "flag above …" label occupies the top-right of the line, so a centred note would be
-        # crossed by the vline.
+        # Pinned to this row's own domain in its top headroom, left of the threshold vline, whose
+        # "flag above …" label drops to the line's foot here, so the top stays free of it.
         fig.add_annotation(text=why, xref="x domain", yref="y domain", x=0, y=1, showarrow=False,
                            xanchor="left", yanchor="top", font=dict(color=theme.MUTED), row=3, col=1)
     fig.update_xaxes(range=[bmin, bmax], row=3, col=1)

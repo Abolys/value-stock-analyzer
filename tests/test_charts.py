@@ -114,6 +114,26 @@ def test_trap_panel_missing_notes_are_pinned_to_their_own_rows():
     assert all(t.xref == "paper" and t.yref == "paper" and t.x == 0 and t.xanchor == "left" for t in titles)
 
 
+def test_trap_panel_rows_are_tall_enough_for_the_pinned_notes_and_flag_drops_down():
+    """The n/m notes sit in each row's top headroom, so the rows must be tall enough for the note
+    to stay above the shaded bands (the old vertical spacing squashed them to ~0.13 of the plot).
+    Without an M value the Beneish flag label drops to the foot of the threshold line, clear of
+    the note in the top-left; with a value it stays at the top."""
+    pio = PiotroskiResult(status=nm(NM_FINANCIALS))
+    alt = AltmanResult(z=Datum.missing(nm(NM_FINANCIALS)))
+    ben = BeneishResult(m=Datum.missing(nm(NM_FINANCIALS)))
+    out = charts.trap_panel(pio, alt, ben)
+    for ya in ("yaxis", "yaxis2", "yaxis3"):
+        dom = getattr(out.fig.layout, ya).domain
+        assert dom[1] - dom[0] >= 0.2  # ~0.13 with the old spacing
+    flag = next(a for a in out.fig.layout.annotations if "flag above" in (a.text or ""))
+    assert flag.xref == "x3" and flag.x == config.BENEISH_THRESHOLD
+    assert flag.y == 0  # foot of the row: the top is taken by the n/m note
+    with_m = charts.trap_panel(None, None, BeneishResult(m=d(-2.4)))
+    flag2 = next(a for a in with_m.fig.layout.annotations if "flag above" in (a.text or ""))
+    assert flag2.y == 1  # back at the top when the row has a value
+
+
 def _tx(kind: str, plan: bool = False, value: float = 1e5) -> InsiderTransaction:
     return InsiderTransaction(ticker="T", date=date(2026, 5, 1), insider="A. Person", role="CEO", type=kind,
                               shares=1000, price=10, value=value, is_10b5_1=plan)
@@ -258,6 +278,35 @@ def test_peer_strip_missing_metric_notes_are_pinned_to_their_own_row():
     titles = out.fig.layout.annotations[:4]
     assert [t.text for t in titles] == [label for _, label, _ in charts.PEER_METRICS]
     assert all(t.xref == "paper" and t.yref == "paper" and t.x == 0 and t.xanchor == "left" for t in titles)
+
+
+def test_peer_strip_keeps_rows_without_any_dots_from_collapsing():
+    """A row with no peer values and no ticker value carries no trace at all, and the renderer
+    squashes such a subplot to zero height, drawing that row's note on top of the row above it.
+    An invisible placeholder trace keeps the row in place instead (the PYPL case: financials,
+    every metric below the MOS row n/m for the ticker and all peers)."""
+    def all_nm(r):
+        r.treatment = "Sector-adjusted"
+        r.metric(SLOT_FCF).name = "ROE − cost of capital (9%)"
+        r.metric(SLOT_LEVERAGE).name = "Price / book"
+        r.inputs.pop("ROIC", None)
+
+    me = run_eval(px=6.0)
+    me.ticker = "PYPL"
+    all_nm(me)
+    peers = [run_eval(px=9.0 + i) for i in range(3)]
+    for p in peers:
+        all_nm(p)
+    out = charts.peer_strip(me, peers)
+    # every subplot row holds at least one trace, so no row can collapse
+    assert {t.yaxis for t in out.fig.data} == {"y", "y2", "y3", "y4"}
+    for t in out.fig.data:  # ...and rows 2-4 hold nothing but the invisible placeholders
+        if t.yaxis != "y":
+            assert t.visible == "legendonly"
+    for xa in ("xaxis2", "xaxis3", "xaxis4"):
+        assert not getattr(out.fig.layout, xa).visible  # no x axis where nothing is measured
+    notes = [a for a in out.fig.layout.annotations if a.text.startswith("PYPL:")]
+    assert [a.xref for a in notes] == ["x2 domain", "x3 domain", "x4 domain"]  # each note on its own row
 
 
 def test_drawdown_history_indexes_both_to_100_on_one_axis():
