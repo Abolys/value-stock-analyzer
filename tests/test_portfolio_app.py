@@ -9,6 +9,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 import config
+from data import prices
 from data.cache import CachedProvider, DiskCache
 from data.fixture_provider import captured_on, fixture_edgar, fixture_provider
 from data.health import HealthReport
@@ -102,6 +103,8 @@ def test_portfolio_page_renders_holding_triggers_journal_and_inbox(provider, mon
     tables = [df.value for df in at.dataframe]
     holdings = next(t for t in tables if "Triggers" in t.columns)
     assert holdings.iloc[0]["Ticker"] == "LULU" and holdings.iloc[0]["Account"] == "TFSA"
+    p = prices.actual_latest_price(provider, "LULU")
+    assert p.ok and holdings.iloc[0]["Price"] == f"{p.value:,.2f} USD ({p.period_end})"
     assert "vs SPY" in holdings.iloc[0]["vs index"] or holdings.iloc[0]["vs index"].startswith("N/A")
     assert any("At purchase" in t.columns for t in tables)  # then vs now
     trig = next(t for t in tables if "Rule" in t.columns)
@@ -188,6 +191,8 @@ def test_cash_deposit_row_on_the_portfolio_page(provider, monkeypatch):
     holdings = next(df.value for df in at.dataframe if "Triggers" in df.value.columns)
     row = holdings.iloc[0]
     assert row["Ticker"] == "LULU" and row["Type"] == "Cash deposit" and row["Triggers"] == "— (cash deposit)"
+    p = prices.actual_latest_price(provider, "LULU")
+    assert p.ok and row["Price"] == f"{p.value:,.2f} USD ({p.period_end})"  # the price column stays on parked cash
     assert "vs SPY" in row["vs index"] or row["vs index"].startswith("N/A")  # performance still checked
     assert any("is parked cash" in c.value for c in at.caption)
     totals = next(df.value for df in at.dataframe if "Cost basis" in df.value.columns)

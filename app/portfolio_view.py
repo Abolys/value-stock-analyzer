@@ -4,7 +4,7 @@ the table frames and styling the page draws (SPEC "Charts" → Portfolio view)."
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
@@ -89,6 +89,14 @@ def _money(v: float | None, ccy: str = "") -> str:
     return "N/A" if v is None else f"{v:,.2f} {ccy}".strip()
 
 
+def _price(v: float | None, as_of: date | None, ccy: str = "") -> str:
+    """The actual latest price in the holding's currency (fx-converted), with the close's date."""
+    if v is None:
+        return "N/A"
+    s = f"{v:,.2f} {ccy}".strip()
+    return f"{s} ({as_of})" if as_of else s
+
+
 def _pct(v: float | None, pts: bool = False) -> str:
     if v is None:
         return "N/A"
@@ -105,6 +113,7 @@ def holdings_frame(views: list[HoldingView]) -> tuple[pd.DataFrame, pd.DataFrame
             "Ticker": h.ticker, "Type": "Cash deposit" if h.is_cash else "Value stock", "Account": h.account,
             "Shares": f"{p.shares:,.4g}",
             "Avg cost": _money(p.avg_cost, h.currency),
+            "Price": _price(p.price, p.price_as_of, h.currency),
             "Value": _money(p.market_value, h.currency) if ok else p.status,
             "Gain": _pct(p.total_return) if ok else "N/A",
             "Realised": _money(p.realised, h.currency), "Unrealised": _money(p.unrealised, h.currency) if ok else "N/A",

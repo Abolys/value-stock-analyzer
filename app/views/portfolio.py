@@ -1,6 +1,6 @@
 """Portfolio page (docs/ui-mockup.html → Portfolio; SPEC "Portfolio and thesis tracking").
 
-Holdings table (value, gain, return vs benchmark, trigger traffic light, unread alerts);
+Holdings table (price, value, gain, return vs benchmark, trigger traffic light, unread alerts);
 per holding the "then vs now" comparison, the sell triggers with their current status,
 the thesis reasons with a "still holds?" tick, the journal and the transactions; then
 the alerts inbox and the watchlist price levels. Every refresh of the page re-evaluates
@@ -77,7 +77,11 @@ def then_now(v: pv.HoldingView) -> None:
     if df.empty:
         st.caption("Nothing to compare.")
     else:
-        st.dataframe(pv.style_states(df, states), hide_index=True, width="stretch")
+        st.dataframe(pv.style_states(df, states), hide_index=True, width="stretch",
+                     column_config={"Metric": st.column_config.Column(width=160),
+                                    "At purchase": st.column_config.Column(width=130),
+                                    "Now": st.column_config.Column(width=130),
+                                    "Change": st.column_config.Column(width=110)})
     st.caption(f"At purchase: analysis {h.snapshot_analysis_id or 'N/A'}. Now: {v.now_label}; the Moat, Devil's "
                "Advocate and aggregate come from the latest full analysis (re-run it on the Stock page). "
                "Green = better, red = worse for that metric.")
@@ -91,7 +95,13 @@ def triggers(v: pv.HoldingView) -> None:
     if tf.empty:
         st.caption("No sell triggers.")
     else:
-        st.dataframe(tf, hide_index=True, width="stretch")
+        st.dataframe(tf, hide_index=True, width="stretch",
+                     column_config={"": st.column_config.Column(width=50),
+                                    "Rule": st.column_config.Column(width=260),
+                                    "Status": st.column_config.Column(width=90),
+                                    "Now": st.column_config.Column(width=110),
+                                    "Threshold": st.column_config.Column(width=110),
+                                    "Last fired": st.column_config.Column(width=100)})
         st.caption(f"🟡 near = within {config.TRIGGER_NEAR_BAND:.0%} of the threshold, or the value is N/A / n/m "
                    "(a trigger that can't be evaluated never fires silently).")
     th = v.holding.thesis

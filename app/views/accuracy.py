@@ -53,4 +53,10 @@ def render(provider) -> None:
                 "ticker": s.row.ticker, "run date": s.row.run_date, "type": s.row.episode_type,
                 "estimate (months)": f"{s.row.turnaround_p25:.0f}–{s.row.turnaround_p75:.0f}",
                 "window ends": s.window_end, "outcome": s.status, "detail": s.detail} for s in firsts]),
-                hide_index=True, width="stretch")
+                hide_index=True, width="stretch",
+                column_config={"ticker": st.column_config.Column(width=90),
+                                "run date": st.column_config.Column(width=110),
+                                "type": st.column_config.Column(width=140),
+                                "estimate (months)": st.column_config.Column(width=150),
+                                "window ends": st.column_config.Column(width=110),
+                                "outcome": st.column_config.Column(width=100)})

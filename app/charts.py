@@ -635,7 +635,7 @@ def drawdown_history(closes: pd.Series | None, bench: pd.Series | None, t: Turna
     for br in t.breaks:
         fig.add_vline(x=pd.Timestamp(br.date), line=dict(color=theme.MARKER, width=1.5, dash="dot"),
                       annotation_text=f"break: {br.type}", annotation_position="top left")
-    _base(fig, 320, legend=dict(orientation="h", y=-0.15), yaxis_title=f"Indexed (100 = {start.date()})")
+    _base(fig, 380, legend=dict(orientation="h", y=-0.15), yaxis_title=f"Indexed (100 = {start.date()})")
     fig.update_xaxes(type="date", range=[start, end])
     fig.update_yaxes(zeroline=False)
     notes = [f"{ticker} and {t.benchmark or 'benchmark'} adjusted closes, both indexed to 100 at {start.date()}; "
@@ -696,7 +696,7 @@ def screener_scatter(points: list[ScatterPoint], excluded: list[str]) -> ChartOu
     hurdle = config.MIN_MARGIN_OF_SAFETY
     fig.add_vline(x=hurdle, line=dict(color=theme.REF_LINE, dash="dot", width=1.5),
                   annotation_text=f"pass ≥ {hurdle:.0%}", annotation_position="top right")
-    _base(fig, 400, showlegend=False, xaxis_title="Margin of safety (Graham Number vs price)",
+    _base(fig, 460, showlegend=False, xaxis_title="Margin of safety (Graham Number vs price)",
           yaxis_title="Quality score (0–10)")
     fig.update_xaxes(tickformat=".0%")
     fig.update_yaxes(range=[0, 11], tickvals=list(range(0, 11, 2)))  # headroom so labels at 10 aren't clipped
@@ -716,7 +716,7 @@ def verdict_history(points: list[tuple[date, float | None, str]]) -> ChartOut:
     fig = go.Figure(go.Scatter(x=[d for d, _, _ in ok], y=[s for _, s, _ in ok], mode="lines+markers",
                                text=[lab for _, _, lab in ok], line=dict(color=theme.PRIMARY, width=2),
                                marker=dict(size=9), hovertemplate="%{x|%Y-%m-%d}: %{y:.1f} (%{text})<extra></extra>"))
-    _base(fig, 240, showlegend=False, yaxis_title="Aggregate (1–10)")
+    _base(fig, 280, showlegend=False, yaxis_title="Aggregate (1–10)")
     fig.update_yaxes(range=[config.SCORE_MIN - 0.5, config.SCORE_MAX + 0.5])
     return ChartOut(fig=fig, title="Aggregate verdict over time", excluded=excluded)
 

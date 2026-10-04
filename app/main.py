@@ -38,9 +38,41 @@ def _ticker_entered() -> None:
         st.session_state["goto_stock"] = True
 
 
-def sidebar(report) -> None:
+TICKER_BOXES = ("ticker_box", "ticker_search")  # the sidebar box and the Stock page's top search box
+
+
+def _sync_ticker_boxes() -> None:
+    """Both ticker inputs mirror the committed ticker. Committing happens in the boxes' on_change
+    callbacks: Streamlit runs a changed widget's callback before the script body, so by the time
+    this runs, session_state["ticker"] already holds the value the user just entered in either box
+    (the callback sets it, with goto_stock). The boxes themselves are never read for a commit:
+    after the callback moved the ticker, the box just committed equals it, while the other box
+    still mirrors the previous ticker until the re-seed below — treating that stale mirror as a
+    fresh commit would undo the user's input. On the Stock page, a ticker the user typed into the
+    URL is a commit too; it is acted on only when it differs from what the app last wrote, so the
+    URL merely catching up to a fresh commit never undoes that commit. st.switch_page() also resets
+    widget values on page change (Streamlit quirk), so re-seed both boxes after every run instead
+    of letting them drift."""
     if "pending_ticker_box" in st.session_state:  # set by ui.open_ticker before this run's widget exists
         st.session_state["ticker_box"] = st.session_state.pop("pending_ticker_box")
+    committed = ""
+    if st.session_state.get("current_page") == "Stock":
+        prev = (st.session_state.get("ticker") or "").strip().upper()
+        linked = (st.query_params.get("ticker") or "").strip().upper()
+        if linked and linked != prev and linked != st.session_state.get("url_ticker"):
+            committed = linked  # the URL names its ticker (bookmarkable)
+    if committed:
+        st.session_state["ticker"] = committed
+        st.session_state["goto_stock"] = True  # land on the Stock page if we weren't already there
+    ticker = (st.session_state.get("ticker") or "").strip().upper()
+    # re-seed unconditionally, not just after a commit: st.switch_page() clears the widget values on
+    # the page change, so the run that follows a switch needs this to bring both boxes back
+    for key in TICKER_BOXES:
+        if ticker and (st.session_state.get(key) or "").strip().upper() != ticker:
+            st.session_state[key] = ticker
+
+
+def sidebar(report) -> None:
     with st.sidebar:
         st.text_input("Ticker", key="ticker_box", on_change=_ticker_entered,
                       placeholder="e.g. LULU, CNR.TO", help="Any ticker; manual tickers bypass the screen")
@@ -150,6 +182,7 @@ def start_alert_check() -> None:
 
 
 def main() -> None:
+    ui.shell_css()  # cap and centre the main column (the mockup's centred-column look)
     auth.gate()  # local use: the owner, no login; through the share link: a password
     provider = _provider()
     report = services.health(provider)
@@ -164,6 +197,7 @@ def main() -> None:
         remind_screen()
     page = st.navigation(list(ui.PAGES.values()))
     st.session_state["current_page"] = page.title
+    _sync_ticker_boxes()  # before any ticker widget renders: align both boxes with the committed ticker
     sidebar(report)
     if st.session_state.pop("goto_stock", False) and page.url_path != "stock":
         st.switch_page(ui.PAGES["stock"])

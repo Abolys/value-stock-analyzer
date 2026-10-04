@@ -44,7 +44,9 @@ def run_header(shown: store.ScreenRun, latest: store.ScreenRun | None, results) 
             with st.expander(f"Failed to load ({len(failed)})"):
                 st.dataframe(pd.DataFrame([{"ticker": r.ticker, "reason": r.load_error,
                                             "likely cause": sv.load_failure_hint(r.load_error)} for r in failed]),
-                             hide_index=True, width="stretch")
+                             hide_index=True, width="stretch",
+                             column_config={"ticker": st.column_config.Column(width=90),
+                                             "likely cause": st.column_config.Column(width=240)})
 
 
 @st.fragment(run_every=config.SCREEN_PROGRESS_POLL_SECONDS)
@@ -140,7 +142,10 @@ def results_table(results) -> list:
     st.caption("Green / red = against the config threshold · grey N/A = data missing · amber n/m = not meaningful, "
                "each with its reason · click a row to open the ticker")
     with st.expander("Cell notes (thresholds, reasons, Altman zone and Beneish)"):
-        st.dataframe(table.notes(), hide_index=True, width="stretch")
+        st.dataframe(table.notes(), hide_index=True, width="stretch",
+                     column_config={"ticker": st.column_config.Column(width=90),
+                                    "column": st.column_config.Column(width=180),
+                                    "value": st.column_config.Column(width=180)})
     rows = event.selection.rows if event and event.selection else []
     if rows:
         ui.open_ticker(table.tickers[rows[0]])
@@ -155,7 +160,8 @@ def scatter(shown) -> None:
     if excluded:
         with st.expander(f"Not on the scatter ({len(excluded)})"):
             st.dataframe(pd.DataFrame([dict(zip(("ticker", "reason"), e.split(": ", 1))) for e in excluded]),
-                         hide_index=True, width="stretch")
+                         hide_index=True, width="stretch",
+                         column_config={"ticker": st.column_config.Column(width=90)})
     sel = event.selection.points if event and event.selection else []
     if sel:
         idx = sel[0].get("point_index", sel[0].get("point_number"))
@@ -200,4 +206,7 @@ def render(provider) -> None:
     if run.field_na:
         with st.expander("Per-field N/A counts"):
             st.dataframe(pd.DataFrame([{"field": k, "N/A": v["na"], "of": v["of"]} for k, v in run.field_na.items()]),
-                         hide_index=True)
+                         hide_index=True,
+                         column_config={"field": st.column_config.Column(width=220),
+                                        "N/A": st.column_config.Column(width=80),
+                                        "of": st.column_config.Column(width=80)})

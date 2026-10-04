@@ -73,17 +73,24 @@ class Layout:
         self.slots["header"] = st.empty()
         st.subheader("Lens scores")
         self.slots["dots"] = st.empty()
-        st.subheader("Fundamentals over time")
-        self.slots["fundamentals"] = st.empty()
-        st.subheader("Versus peers")
-        self.slots["peers"] = st.empty()
-        st.subheader("Asset floor · if the earnings case fails")
-        self.slots["asset_floor"] = st.empty()
-        left, right = st.columns(2)
-        with left:
+        # Wide screens: the two chart rows sit side by side; on mobile the columns stack
+        fund_col, peers_col = st.columns(2)
+        with fund_col:
+            st.subheader("Fundamentals over time")
+            self.slots["fundamentals"] = st.empty()
+        with peers_col:
+            st.subheader("Versus peers")
+            self.slots["peers"] = st.empty()
+        # Wide screens: three compact panels in one row (they keep the spec's left-to-right order
+        # and stack on mobile)
+        floor_col, val_col, trap_col = st.columns(3)
+        with floor_col:
+            st.subheader("Asset floor · if the earnings case fails")
+            self.slots["asset_floor"] = st.empty()
+        with val_col:
             st.subheader("Valuation")
             self.slots["valuation"] = st.empty()
-        with right:
+        with trap_col:
             st.subheader("Value-trap scores")
             self.slots["trap"] = st.empty()
         st.subheader("Turnaround outlook")
@@ -228,8 +235,14 @@ def draw_lens(slot, lens: LensResult | None) -> None:
                 if value:
                     st.markdown(f"**{label}:** {value}")
         if lens.key_figures:
-            st.dataframe(pd.DataFrame([{"figure": k, "value": v} for k, v in lens.key_figures.items()]),
-                         hide_index=True, width="stretch")
+            # A fixed box, not width="content": the table stretches to fill its container while a
+            # content-width container shrinks to the table, so the two size each other and the
+            # table collapses to its minimum. Inside a fixed box the figure column takes the slack
+            # and the value column keeps its 240px.
+            with st.container(width=560):
+                st.dataframe(pd.DataFrame([{"figure": k, "value": v} for k, v in lens.key_figures.items()]),
+                             hide_index=True,
+                             column_config={"value": st.column_config.Column(width=240)})
         with st.expander("Rationale and assumptions"):
             st.markdown(lens.rationale)
             st.json({k: (v if isinstance(v, (int, float, str, bool, list, dict)) or v is None else str(v))
@@ -269,10 +282,21 @@ def draw_turnaround_details(slot, run: AnalysisRun) -> None:
                 **{f"months {clock_label(c)}": round(e.months_from[c], 1) if c in e.months_from else None
                    for c in (t.clock, t.secondary_clock) if c},
                 "type": e.episode_type, "status": "recovered" if e.recovered else f"unrecovered: {e.unrecovered_reason}",
-            } for e in t.episodes]), hide_index=True, width="stretch")
+            } for e in t.episodes]), hide_index=True, width="stretch",
+                         column_config={
+                             "peak": st.column_config.Column(width=100),
+                             "trough": st.column_config.Column(width=100),
+                             "recovered": st.column_config.Column(width=100),
+                             "drop": st.column_config.Column(width=70),
+                             **{f"months {clock_label(c)}": st.column_config.Column(width=90)
+                                for c in (t.clock, t.secondary_clock) if c},
+                             "type": st.column_config.Column(width=150),
+                         })  # "status" keeps the leftover width: it carries the reason text
         with st.expander("All signals checked"):
             st.dataframe(pd.DataFrame([{"signal": x.name, "active": x.active, "detail": x.detail} for x in t.signals]),
-                         hide_index=True, width="stretch")
+                         hide_index=True, width="stretch",
+                         column_config={"signal": st.column_config.Column(width=220),
+                                        "active": st.column_config.Column(width=70)})
         for n in t.notes:
             st.caption(f"Note: {n}")
         with st.expander("Turnaround rationale and assumptions"):
@@ -298,7 +322,14 @@ def draw_history(slot, run: AnalysisRun, bundle: sv.PriceBundle | None) -> None:
             "cost": f"${s.row.total_cost:.4f}"} for s in reversed(scored)])
         grey = {history.SAME_EPISODE, history.NO_ESTIMATE}
         st.dataframe(df.style.apply(lambda r: ["color: #b4b2a9" if r["outcome"] in grey else ""] * len(r), axis=1),
-                     hide_index=True, width="stretch")
+                     hide_index=True, width="stretch",
+                     column_config={"run": st.column_config.Column(width=130),
+                                    "aggregate": st.column_config.Column(width=90),
+                                    "verdict": st.column_config.Column(width=130),
+                                    "lenses": st.column_config.Column(width=150),
+                                    "estimate": st.column_config.Column(width=210),
+                                    "episode": st.column_config.Column(width=130),
+                                    "outcome": st.column_config.Column(width=100)})
         st.caption("Only the first estimate in each drawdown episode is scored, from that run's date; later runs in "
                    "the same episode are greyed as 'same episode'.")
 
@@ -467,19 +498,40 @@ def run_progressive(provider, ticker: str, lay: Layout, llm: LLMClient, use_edga
     return e
 
 
+def _search_entered() -> None:
+    value = (st.session_state.get("ticker_search") or "").strip().upper()
+    if value:
+        st.session_state["ticker"] = value
+        st.session_state["goto_stock"] = True  # same contract as the sidebar box; a no-op when already here
+
+
+def search_box() -> None:
+    """The page-top ticker search: type a different ticker and press Enter to switch stocks, so the
+    input is always at hand even deep into a stock's detail. main._sync_ticker_boxes keeps it and
+    the sidebar's Ticker box mirrored on the committed ticker."""
+    st.text_input("Look up a ticker", key="ticker_search", on_change=_search_entered,
+                  placeholder="e.g. LULU, CNR.TO",
+                  help="Type a new ticker and press Enter; this session's analyses stay available, "
+                       "so you can switch back the same way.")
+
+
 def render(provider) -> None:
-    linked = (st.query_params.get("ticker") or "").strip().upper()
-    if linked and linked != st.session_state.get("ticker"):
-        st.session_state["ticker"] = linked
     ticker = st.session_state.get("ticker")
     if ticker:
         st.query_params["ticker"] = ticker  # the page URL names its ticker (bookmarkable)
+        st.session_state["url_ticker"] = ticker  # so main._sync_ticker_boxes can tell the URL merely
+        # catching up to a fresh commit from a ticker the user typed into the address bar
     if not ticker:
         st.title("Stock")
-        st.info("Enter a ticker in the sidebar, or click a row or point on the Screener.")
+        top = st.columns([7, 1.5, 1.5])  # the same top row as the detail view, so the search box sits in one place
+        with top[0]:
+            search_box()
+        st.info("Type a ticker and press Enter, or click a row or point on the Screener.")
         return
     llm = llm_notice()
-    top = st.columns([4, 2, 1])
+    top = st.columns([7, 1.5, 1.5])  # the controls sit together at the right, not across the whole width
+    with top[0]:
+        search_box()  # above everything, so a different stock is one input away even mid-detail
     use_edgar = top[1].checkbox("Include SEC EDGAR", value=True, key=f"edgar-{ticker}",
                                 help="Leadership 8-K/6-K and Form 4 insiders")
     rerun = auth.is_owner() and top[2].button("Re-run analysis", key=f"rerun-{ticker}")

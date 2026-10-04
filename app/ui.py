@@ -1,5 +1,6 @@
 """Small shared Streamlit pieces: page registry and navigation to a ticker, tags,
-the data-source banner and chart display with its caption."""
+the app-shell styles (content width), the data-source banner and chart display with
+its caption."""
 
 from __future__ import annotations
 
@@ -15,6 +16,23 @@ from data.health import BANNER, HealthReport
 
 _chart_ids = itertools.count()
 PAGES: dict[str, Any] = {}  # filled by app/main.py: "screener" | "stock" | "accuracy" → st.Page
+
+# The shell styles. Streamlit's "wide" layout is full-bleed, so on large monitors the charts and
+# tables stretch into flat slabs; the mockup is a centred column. 1400px is the widest the main
+# content gets (the sidebar keeps its own width).
+SHELL_CSS = """
+<style>
+.block-container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+</style>
+"""
+
+
+def shell_css() -> None:
+    """Inject the app-shell styles; called once per run from app/main.py."""
+    st.markdown(SHELL_CSS, unsafe_allow_html=True)
 
 TAG_STYLE = {
     "warning": "background:rgba(250,178,25,0.20);color:#b36b00",

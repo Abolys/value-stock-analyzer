@@ -3,3 +3,12 @@
 # to reach the app from another device, and put it behind authentication if you do.
 [server]
 address = "localhost"
+
+# Pin the light theme: the charts are drawn with the light palette's ink (plotly_white) and the
+# mockup's light palette is the visual target; dark mode would make chart text unreadable.
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#f7f6f3"
+secondaryBackgroundColor = "#fcfcfb"
+textColor = "#0b0b0b"
