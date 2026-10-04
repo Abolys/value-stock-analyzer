@@ -10,6 +10,8 @@ Advocate last), then the aggregate and the turnaround.
 
 from __future__ import annotations
 
+import html
+import re
 from datetime import date, datetime
 
 import pandas as pd
@@ -17,7 +19,8 @@ import streamlit as st
 from pydantic import BaseModel, ConfigDict, Field
 
 import config
-from analysis.models import LENSES, AnalysisRun, DevilsAdvocateResult, LensResult, LLMLensResult, MoatResult, QuantResult
+from analysis.models import (LENSES, AnalysisRun, DevilsAdvocateResult, LensResult, LLMLensResult, MoatResult,
+                             QuantResult)
 from analysis.pipeline import FUND_NOTE, run_analysis
 from analysis.turnaround import clock_label
 from analysis.turnaround_models import STATUS_WITHHELD
@@ -35,6 +38,7 @@ from screening.engine import ScreenContext
 from storage import history
 
 LENS_TAB = {"quant": "Quant", "macro": "Macro", "moat": "Moat", "devils_advocate": ":orange[⚠ Devil's Advocate]"}
+_NUM_DISPLAY = re.compile(r"^\d+(\.\d+)?$")  # a plain score: shown large in the lens verdict card
 WAITING = {
     "header": "Loading statements, screen metrics, insiders and leadership…",
     "dots": "Waiting on: the four lenses",
@@ -70,39 +74,58 @@ class Layout:
 
     def __init__(self):
         self.slots: dict[str, st.delta_generator.DeltaGenerator] = {}
-        self.slots["header"] = st.empty()
-        st.subheader("Lens scores")
-        self.slots["dots"] = st.empty()
+        # Each major section is its own bordered card (the mockup's .card), so the long stock
+        # page reads as grouped surfaces instead of one flat scroll.
+        with st.container(border=True):
+            self.slots["header"] = st.empty()
+        st.space(16)
+        with st.container(border=True):
+            st.subheader("Lens scores")
+            self.slots["dots"] = st.empty()
+        st.space(16)
         # Wide screens: the two chart rows sit side by side; on mobile the columns stack
-        fund_col, peers_col = st.columns(2)
+        fund_col, peers_col = st.columns(2, gap="medium")
         with fund_col:
-            st.subheader("Fundamentals over time")
-            self.slots["fundamentals"] = st.empty()
+            with st.container(border=True):
+                st.subheader("Fundamentals over time")
+                self.slots["fundamentals"] = st.empty()
         with peers_col:
-            st.subheader("Versus peers")
-            self.slots["peers"] = st.empty()
+            with st.container(border=True):
+                st.subheader("Versus peers")
+                self.slots["peers"] = st.empty()
+        st.space(16)
         # Wide screens: three compact panels in one row (they keep the spec's left-to-right order
         # and stack on mobile)
-        floor_col, val_col, trap_col = st.columns(3)
+        floor_col, val_col, trap_col = st.columns(3, gap="medium")
         with floor_col:
-            st.subheader("Asset floor · if the earnings case fails")
-            self.slots["asset_floor"] = st.empty()
+            with st.container(border=True):
+                st.subheader("Asset floor · if the earnings case fails")
+                self.slots["asset_floor"] = st.empty()
         with val_col:
-            st.subheader("Valuation")
-            self.slots["valuation"] = st.empty()
+            with st.container(border=True):
+                st.subheader("Valuation")
+                self.slots["valuation"] = st.empty()
         with trap_col:
-            st.subheader("Value-trap scores")
-            self.slots["trap"] = st.empty()
-        st.subheader("Turnaround outlook")
-        self.slots["turnaround"] = st.empty()
-        st.subheader("Dividend and context")
-        self.slots["dividend"] = st.empty()
+            with st.container(border=True):
+                st.subheader("Value-trap scores")
+                self.slots["trap"] = st.empty()
+        st.space(16)
+        with st.container(border=True):
+            st.subheader("Turnaround outlook")
+            self.slots["turnaround"] = st.empty()
+        st.space(16)
+        with st.container(border=True):
+            st.subheader("Dividend and context")
+            self.slots["dividend"] = st.empty()
+        st.space(16)
         tabs = st.tabs([LENS_TAB[n] for n in LENSES] + ["Turnaround details", "History", "Raw data"])
         for name, tab in zip([*LENSES, "turnaround_tab", "history", "raw"], tabs):
             with tab:
                 self.slots[name] = st.empty()
-        st.subheader("Export")
-        self.slots["export"] = st.empty()
+        st.space(16)
+        with st.container(border=True):
+            st.subheader("Export")
+            self.slots["export"] = st.empty()
         for name, msg in WAITING.items():
             self.slots[name].caption(f"⏳ {msg}")
 
@@ -118,12 +141,13 @@ def draw_header(slot, run: AnalysisRun, ch: dict[str, ChartOut | None]) -> None:
     with slot.container():
         left, right = st.columns([3, 2])
         price = f"{s.price.value:,.2f} {run.currency or ''}" if s is not None and s.price.ok else "price N/A"
-        left.markdown(f"## {run.company or run.ticker} <span style='font-size:0.9rem;color:#898781'>"
-                      f"{run.ticker} · {price}</span>", unsafe_allow_html=True)
-        kind = "accent" if run.aggregate is None or run.aggregate.score is None else (
-            "success" if run.aggregate.score >= 6 else "warning" if run.aggregate.score >= 4 else "danger")
-        right.markdown(f"<div style='text-align:right;padding-top:1rem'>"
-                       f"{ui.badge_html(sv.verdict_badge(run.aggregate), kind)}</div>", unsafe_allow_html=True)
+        # Hero: the company name as the page title, the price as a sub-line, the verdict large on the right
+        left.markdown(f"# {run.company or run.ticker}")
+        left.markdown((f"<span style='font-size:1rem;font-weight:500'>{run.ticker}</span> "
+                       f"<span style='color:#6e6d68'>· {price}</span>") if run.company else
+                      f"<span style='color:#6e6d68'>{price}</span>",
+                      unsafe_allow_html=True)
+        right.markdown(sv.verdict_hero(run.aggregate), unsafe_allow_html=True)
         st.caption(sv.asof_line(run) + f" · {run.sector or 'N/A'} / {run.industry or 'N/A'} · {run.treatment}")
         st.markdown(ui.tags_html(sv.header_tags(run) + sv.held_tags(run.ticker, config.RUNS_DB_PATH)),
                     unsafe_allow_html=True)
@@ -194,10 +218,26 @@ def draw_dividend(slot, run: AnalysisRun, ch: dict[str, ChartOut | None]) -> Non
                 st.markdown(sv.dividend_line(run))
         else:
             st.caption(sv.dividend_line(run) + " — dividend panel hidden for non-payers")
+        # KPI treatment: a small muted label and a large semibold value, per metric
         cols = st.columns(3)
         for col, (label, value) in zip(cols, sv.context_items(run)):
-            col.markdown(f"<span style='font-size:0.8rem;color:#898781'>{label}</span><br>{value}",
-                         unsafe_allow_html=True)
+            col.metric(label, value)
+
+
+def _lens_verdict_card(lens: LensResult) -> None:
+    """The lens verdict as a quiet bordered card: the label, the score large when it is a number,
+    and the confidence as a chip. Alert boxes stay reserved for the real warnings below."""
+    with st.container(border=True):
+        left, right = st.columns([3, 1])
+        big = _NUM_DISPLAY.match(lens.display or "")
+        left.markdown(f"<span style='font-size:0.8rem;color:#6e6d68'>{html.escape(lens.label, quote=False)}</span><br>"
+                      f"<span style='font-size:{'1.55rem' if big else '1.05rem'};font-weight:600;"
+                      f"line-height:1.3'>{html.escape(lens.display, quote=False)}</span>",
+                      unsafe_allow_html=True)
+        if lens.ok and lens.confidence:
+            right.markdown(f"<div style='text-align:right;padding-top:.85rem'>"
+                           f"{ui.badge_html('confidence ' + lens.confidence, 'accent')}</div>",
+                           unsafe_allow_html=True)
 
 
 def draw_lens(slot, lens: LensResult | None) -> None:
@@ -205,8 +245,7 @@ def draw_lens(slot, lens: LensResult | None) -> None:
         if lens is None:
             st.caption("Not run.")
             return
-        box = st.warning if isinstance(lens, DevilsAdvocateResult) else st.info
-        box(f"**{lens.label}: {lens.display}**" + (f" · confidence {lens.confidence}" if lens.ok else ""))
+        _lens_verdict_card(lens)
         if lens.status.startswith("Insufficient") and "error" in lens.status:
             st.error(lens.status)
         if lens.stale:
@@ -214,7 +253,7 @@ def draw_lens(slot, lens: LensResult | None) -> None:
         for c in lens.confidence_reasons:
             st.markdown(f"⚠️ **Low confidence:** {c}")
         if lens.mapping_steps:
-            st.markdown("**How this score was built:** " + " → ".join(s.line for s in lens.mapping_steps))
+            st.markdown("**How this score was built:**<br>" + ui.steps_html([s.line for s in lens.mapping_steps]))
         elif lens.mapping_line:
             st.markdown(f"**How this score was built:** {lens.mapping_line}")
         if lens.completeness:

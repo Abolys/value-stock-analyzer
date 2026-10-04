@@ -189,12 +189,15 @@ def render(provider) -> None:
                    f"{done:,} of {run.total:,} tickers screened so far. Tickers not reached yet are missing; "
                    "refresh the page to see more.")
     run_header(run, store.latest_run(db), results)
+    st.space(16)
     changes = None
     if not partial and len(completed) > 1:
         prev = completed[1]
         changes = sv.screen_changes(store.load_results(prev.run_id, db), results, prev.lists, run.lists)
     changes_panel(changes)
+    st.space(16)
     shown = results_table(results)
+    st.space(16)
     scatter(shown)
     div = store.load_divergences(run.run_id, db)
     if div:

@@ -48,6 +48,7 @@ def render(provider) -> None:
         st.caption(n)
     firsts = [s for s in scored if s.scored]
     if firsts:
+        st.space(12)
         with st.expander(f"Scored estimates ({len(firsts)})"):
             st.dataframe(pd.DataFrame([{
                 "ticker": s.row.ticker, "run date": s.row.run_date, "type": s.row.episode_type,

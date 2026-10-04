@@ -43,6 +43,29 @@ def verdict_badge(agg: AggregateResult | None) -> str:
     return f"{agg.score:.1f} / 10 — {agg.verdict} · {agg.lenses_used} of {agg.lenses_total} lenses"
 
 
+def verdict_hero(agg: AggregateResult | None) -> str:
+    """The header card's right side: the verdict as a large score number with the band and the
+    lens count, instead of a small pill. The exports keep the compact verdict_badge() line."""
+    num, color, chip, sub = "—", "#6e6d68", "", "verdict pending"
+    if agg is not None:
+        if agg.not_applicable:
+            sub = agg.not_applicable
+        elif agg.score is None:
+            sub = f"Insufficient data · 0 of {agg.lenses_total} lenses"
+        else:
+            num = f"{agg.score:.1f}"
+            color = "#1a8f1a" if agg.score >= 6 else "#b36b00" if agg.score >= 4 else "#d03b3b"
+            chip = (f"<span style='background:rgba(42,120,214,0.14);color:#2a78d6;font-size:0.8rem;"
+                    f"padding:2px 10px;border-radius:8px;font-weight:500'>{agg.verdict}</span>")
+            sub = f"{agg.lenses_used} of {agg.lenses_total} lenses"
+    return (f"<div style='text-align:right;padding-top:.4rem'>"
+            f"<div><span style='font-size:2.1rem;font-weight:700;color:{color}'>{num}</span>"
+            + (f"<span style='font-size:1rem;font-weight:400;color:#6e6d68'> / 10</span>" if num != "—" else "")
+            + "</div>"
+            + (f"<div style='margin-top:4px'>{chip}</div>" if chip else "")
+            + f"<div style='font-size:.8rem;color:#6e6d68;margin-top:4px'>{sub}</div></div>")
+
+
 def asof_line(run: AnalysisRun) -> str:
     kind = "annual, not TTM" if "annual" in (run.fundamentals_label or "") else "TTM"
     fund = run.fundamentals_as_of.isoformat() if run.fundamentals_as_of else "N/A"

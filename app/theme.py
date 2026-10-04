@@ -21,7 +21,7 @@ WARNING = "#fab219"
 CRITICAL = "#d03b3b"
 
 INK = "#52514e"  # secondary text on charts
-MUTED = "#898781"
+MUTED = "#6e6d68"  # small muted text on the light surfaces: dark enough for WCAG AA (≈4.8:1)
 GRID = "#c3c2b7"
 PEER_GREY = "#b4b2a9"
 PRIMARY = CATEGORICAL[0]
@@ -41,7 +41,7 @@ ACC_WAITING = "#b4b2a9"
 ACC_MISSED = "#e34948"
 
 # Screener cell states (text colour; readable on light and dark Streamlit themes).
-CELL_TEXT = {"pass": "#1a8f1a", "fail": "#d03b3b", "na": "#898781", "nm": "#c98500", "info": ""}
+CELL_TEXT = {"pass": "#1a8f1a", "fail": "#d03b3b", "na": "#6e6d68", "nm": "#c98500", "info": ""}
 CELL_BG = {"pass": "rgba(12,163,12,0.10)", "fail": "rgba(208,59,59,0.10)", "na": "rgba(137,135,129,0.12)",
            "nm": "rgba(250,178,25,0.16)", "info": ""}
 

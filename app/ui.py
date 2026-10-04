@@ -19,13 +19,20 @@ PAGES: dict[str, Any] = {}  # filled by app/main.py: "screener" | "stock" | "acc
 
 # The shell styles. Streamlit's "wide" layout is full-bleed, so on large monitors the charts and
 # tables stretch into flat slabs; the mockup is a centred column. 1400px is the widest the main
-# content gets (the sidebar keeps its own width).
+# content gets (the sidebar keeps its own width). The type scale follows the mockup's editorial
+# target: one calm page title and quiet section labels — Streamlit's default ~700-weight headings
+# make every section shout at the same volume.
 SHELL_CSS = """
 <style>
 .block-container {
     max-width: 1400px;
     margin: 0 auto;
 }
+.stApp h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
+.stApp h2 { font-size: 1.0625rem; font-weight: 500; }
+.stApp h3 { font-size: 1rem; font-weight: 500; }
+/* Align digits in columns everywhere in markdown/HTML text (the mockup's tabular-nums rule). */
+.stApp [data-testid="stMarkdownContainer"] { font-variant-numeric: tabular-nums; }
 </style>
 """
 
@@ -60,6 +67,14 @@ def tags_html(tags: list[Tag]) -> str:
 def badge_html(text: str, kind: str = "accent") -> str:
     return (f'<span style="{TAG_STYLE[kind]};font-size:1rem;padding:4px 12px;border-radius:8px;'
             f'font-weight:500">{html.escape(text)}</span>')
+
+
+def steps_html(steps: list[str]) -> str:
+    """Mapping steps as a chain of chips with arrows between them (the mockup's mapping line),
+    instead of one long inline bold sentence."""
+    chips = [f'<span style="{TAG_STYLE["accent"]};font-size:0.78rem;padding:2px 8px;border-radius:8px;'
+             f'white-space:nowrap">{html.escape(s, quote=False)}</span>' for s in steps]
+    return " <span style='color:#6e6d68'>→</span> ".join(chips)
 
 
 def banner(report: HealthReport) -> None:

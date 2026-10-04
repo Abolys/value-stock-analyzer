@@ -42,12 +42,12 @@ def test_stock_page_renders_every_section(tmp_path, monkeypatch):
     # the Stock page's top search box (for switching to a different stock) mirrors the committed ticker too
     assert at.text_input(key="ticker_search").value == "LULU"
     assert any("No ANTHROPIC_API_KEY and no Claude Code CLI found" in i.value for i in at.info)
-    lens_boxes = " ".join(b.value for b in [*at.info, *at.warning])
-    for label in ("Quantitative Fundamental:", "Macro & Balance Sheet Risk:", "Business Moat:", "Devil's Advocate:"):
-        assert label in lens_boxes, label
-    assert "LLM not configured" in lens_boxes
-    md = " ".join(m.value for m in at.markdown)
-    assert "2 of 4 lenses" in md  # verdict badge: the LLM lenses excluded, not zero
+    md = " ".join(m.value for m in at.markdown).replace("&amp;", "&")
+    # the lens verdicts render in their own cards (markdown), not in alert boxes
+    for label in ("Quantitative Fundamental", "Macro & Balance Sheet Risk", "Business Moat", "Devil's Advocate"):
+        assert label in md, label
+    assert "LLM not configured" in md
+    assert "2 of 4 lenses" in md  # verdict hero: the LLM lenses excluded, not zero
     assert "Price as of" in " ".join(c.value for c in at.caption)
     assert "How this score was built:" in md and "Leadership:" in md
     heads = [h.value for h in at.subheader]

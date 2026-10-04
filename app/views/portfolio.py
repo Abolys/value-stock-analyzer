@@ -246,7 +246,7 @@ def inbox() -> None:
         c1, c2 = st.columns([8, 1])
         c1.markdown(f"{'🔔 **' if new else '• '}{a.ticker}: {config.ALERT_KINDS.get(a.kind, a.kind)}"
                     f"{'**' if new else ''} — {a.message} "
-                    f"<span style='color:#898781;font-size:0.8rem'>{pv.fmt_when(a.created_at)} · {a.source}"
+                    f"<span style='color:#6e6d68;font-size:0.8rem'>{pv.fmt_when(a.created_at)} · {a.source}"
                     f"{' · email ' + a.email_status if a.email_status else ''}</span>", unsafe_allow_html=True)
         if new and auth.is_owner() and c2.button("Read", key=f"pf-read-{a.alert_id}"):
             store.mark_read([a.alert_id])
@@ -320,26 +320,32 @@ def render(provider) -> None:
                               key="pf-select")
         st.session_state["portfolio_selected"] = chosen
         v = next(x for x in views if x.holding.holding_id == chosen)
-        kind_toggle(v)
-        if v.holding.is_cash:
-            st.caption(f"{v.holding.ticker} is parked cash, totalled apart from your value stocks. Its value, gain/loss "
-                       "and return vs the index are tracked above; open its Stock page for the price-based analysis. "
-                       "No thesis, sell triggers or alerts.")
-            journal(v)
-        else:
-            left, right = st.columns(2)
-            with left:
-                then_now(v)
-                reasons(v)
-            with right:
-                triggers(v)
+        st.space(12)
+        # One card per holding: the whole then/now state, triggers, journal and transactions
+        with st.container(border=True):
+            kind_toggle(v)
+            if v.holding.is_cash:
+                st.caption(f"{v.holding.ticker} is parked cash, totalled apart from your value stocks. Its value, gain/loss "
+                           "and return vs the index are tracked above; open its Stock page for the price-based analysis. "
+                           "No thesis, sell triggers or alerts.")
                 journal(v)
-        transactions(v)
+            else:
+                left, right = st.columns(2, gap="medium")
+                with left:
+                    then_now(v)
+                    reasons(v)
+                with right:
+                    triggers(v)
+                    journal(v)
+            st.space(12)
+            transactions(v)
         if auth.is_owner():
             with st.expander("Add another holding"):
                 t = st.text_input("Ticker", key="pf-add-ticker-2")
                 if st.button("Open its Stock page", key="pf-add-go-2") and t.strip():
                     st.session_state["add_to_portfolio"] = t.strip().upper()
                     ui.open_ticker(t.strip())
+    st.space(20)
     inbox()
+    st.space(20)
     watchlist_levels()

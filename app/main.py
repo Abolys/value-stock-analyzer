@@ -78,17 +78,20 @@ def sidebar(report) -> None:
                       placeholder="e.g. LULU, CNR.TO", help="Any ticker; manual tickers bypass the screen")
         spend, calls, hits = llm_store.month_spend(path=config.RUNS_DB_PATH)
         analyses = llm_store.month_analyses(path=config.RUNS_DB_PATH)
-        st.caption(f"API spend this month: \\${spend:.2f} · {analyses} analyses ({calls} LLM calls, {hits} cache hits)")
-        cc_calls, cc_est = llm_store.month_claude_code(path=config.RUNS_DB_PATH)
-        if cc_calls:
-            st.caption(f"Claude Code (subscription) this month: {cc_calls} calls, ≈\\${cc_est:.2f} at API list prices")
         unread = pf_store.unread_count(path=config.RUNS_DB_PATH)
         checking = " · checking alerts…" if alert_jobs.running(config.RUNS_DB_PATH) else ""
         if "portfolio" in ui.PAGES:
             st.page_link(ui.PAGES["portfolio"], label=f"Alerts: {unread} unread{checking}", icon="🔔")
         else:
             st.caption(f"Alerts: {unread} unread{checking}")
-        st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
+        # The fine print (spend, data health) folds away; the expander title carries the one number
+        # worth glancing at: this month's API spend.
+        with st.expander(f"Status · \\${spend:.2f} API spend this month"):
+            st.caption(f"API spend this month: \\${spend:.2f} · {analyses} analyses ({calls} LLM calls, {hits} cache hits)")
+            cc_calls, cc_est = llm_store.month_claude_code(path=config.RUNS_DB_PATH)
+            if cc_calls:
+                st.caption(f"Claude Code (subscription) this month: {cc_calls} calls, ≈\\${cc_est:.2f} at API list prices")
+            st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
         access_and_feedback()
 
 
@@ -187,10 +190,14 @@ def main() -> None:
     provider = _provider()
     report = services.health(provider)
     ui.PAGES.update({
-        "screener": st.Page(lambda: screener.render(provider), title="Screener", url_path="screener", default=True),
-        "stock": st.Page(lambda: stock.render(provider), title="Stock", url_path="stock"),
-        "portfolio": st.Page(lambda: portfolio.render(provider), title="Portfolio", url_path="portfolio"),
-        "accuracy": st.Page(lambda: accuracy.render(provider), title="Estimate accuracy", url_path="accuracy"),
+        "screener": st.Page(lambda: screener.render(provider), title="Screener", url_path="screener", default=True,
+                            icon=":material/search:"),
+        "stock": st.Page(lambda: stock.render(provider), title="Stock", url_path="stock",
+                         icon=":material/insights:"),
+        "portfolio": st.Page(lambda: portfolio.render(provider), title="Portfolio", url_path="portfolio",
+                             icon=":material/account_balance_wallet:"),
+        "accuracy": st.Page(lambda: accuracy.render(provider), title="Estimate accuracy", url_path="accuracy",
+                            icon=":material/track_changes:"),
     })
     if auth.is_owner():  # a viewer never starts background work
         start_alert_check()
