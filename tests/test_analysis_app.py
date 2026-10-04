@@ -33,7 +33,6 @@ def test_stock_page_renders_every_section(tmp_path, monkeypatch):
     at = AppTest.from_file("../app/main.py", default_timeout=180)
     at.run()
     assert not at.exception
-    assert any("API spend this month" in c.value for c in at.sidebar.caption)
     at.sidebar.text_input(key="ticker_box").set_value("LULU").run()  # opens the Stock page and auto-runs
     assert not at.exception
     # st.switch_page() used to reset the sidebar input on the page change, making it look as if

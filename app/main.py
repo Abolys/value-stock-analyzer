@@ -21,7 +21,7 @@ from app import alert_jobs, auth, screen_jobs, services, ui  # noqa: E402
 from app import screener_view  # noqa: E402
 from app.views import accuracy, portfolio, screener, stock  # noqa: E402
 from portfolio import store as pf_store  # noqa: E402
-from storage import feedback, llm_store  # noqa: E402
+from storage import feedback  # noqa: E402
 
 st.set_page_config(page_title="Value Stock Analyzer", layout="wide")
 
@@ -72,26 +72,16 @@ def _sync_ticker_boxes() -> None:
             st.session_state[key] = ticker
 
 
-def sidebar(report) -> None:
+def sidebar() -> None:
     with st.sidebar:
         st.text_input("Ticker", key="ticker_box", on_change=_ticker_entered,
                       placeholder="e.g. LULU, CNR.TO", help="Any ticker; manual tickers bypass the screen")
-        spend, calls, hits = llm_store.month_spend(path=config.RUNS_DB_PATH)
-        analyses = llm_store.month_analyses(path=config.RUNS_DB_PATH)
         unread = pf_store.unread_count(path=config.RUNS_DB_PATH)
         checking = " · checking alerts…" if alert_jobs.running(config.RUNS_DB_PATH) else ""
         if "portfolio" in ui.PAGES:
             st.page_link(ui.PAGES["portfolio"], label=f"Alerts: {unread} unread{checking}", icon="🔔")
         else:
             st.caption(f"Alerts: {unread} unread{checking}")
-        # The fine print (spend, data health) folds away; the expander title carries the one number
-        # worth glancing at: this month's API spend.
-        with st.expander(f"Status · \\${spend:.2f} API spend this month"):
-            st.caption(f"API spend this month: \\${spend:.2f} · {analyses} analyses ({calls} LLM calls, {hits} cache hits)")
-            cc_calls, cc_est = llm_store.month_claude_code(path=config.RUNS_DB_PATH)
-            if cc_calls:
-                st.caption(f"Claude Code (subscription) this month: {cc_calls} calls, ≈\\${cc_est:.2f} at API list prices")
-            st.caption(f"Data source check: {'OK' if report.ok else 'FAILED'} at {report.checked_at:%Y-%m-%d %H:%M}")
         access_and_feedback()
 
 
@@ -205,7 +195,7 @@ def main() -> None:
     page = st.navigation(list(ui.PAGES.values()))
     st.session_state["current_page"] = page.title
     _sync_ticker_boxes()  # before any ticker widget renders: align both boxes with the committed ticker
-    sidebar(report)
+    sidebar()
     if st.session_state.pop("goto_stock", False) and page.url_path != "stock":
         st.switch_page(ui.PAGES["stock"])
     ui.banner(report)
