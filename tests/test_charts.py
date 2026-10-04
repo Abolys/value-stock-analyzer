@@ -13,7 +13,7 @@ from analysis.turnaround_models import COMPANY_SPECIFIC, Episode, TurnaroundResu
 from app import charts, theme
 from data.form4 import InsiderTransaction
 from data.values import Datum
-from screening.models import SLOT_MOS
+from screening.models import SLOT_FCF, SLOT_LEVERAGE, SLOT_MOS
 from signals.asset_floor import AssetFloor
 from signals.dcf import ReverseDcf, SensitivityGrid
 from signals.dividends import NO_DIVIDEND, DividendCut, DividendSafety
@@ -208,6 +208,35 @@ def test_peer_strip_lists_na_and_nm_peers():
     grey = next(t for t in out.fig.data if t.name == "peers")
     assert any("PEER1 — Peer One" in s for s in grey.text)  # peers named on hover
     assert "2 peers from your universe lists" in out.caption
+
+
+def test_peer_strip_missing_metric_notes_are_pinned_to_their_own_row():
+    """Each 'n/m / N/A' note must be anchored to its own subplot row, in that row's top headroom and
+    left-anchored. A whole-figure anchor stacks every note on top of each other; the old
+    annotations[:4] patch loop hit the subplot titles instead of the notes (leaving them
+    right-anchored mid-row, at the dots' height)."""
+    me = run_eval(px=6.0)
+    me.ticker, me.name = "BHF", "Berkshire Hathaway"
+    me.treatment = "Sector-adjusted"
+    me.metric(SLOT_FCF).name = "ROE − cost of capital (9%)"
+    me.metric(SLOT_LEVERAGE).name = "Price / book"
+    me.inputs.pop("ROIC", None)
+    peer1, peer2 = run_eval(px=6.0), run_eval(px=7.0)
+    peer1.ticker, peer1.name = "PEER1", "Peer One"
+    peer2.ticker, peer2.name = "PEER2", "Peer Two"
+    out = charts.peer_strip(me, [peer1, peer2])
+    notes = [a for a in out.fig.layout.annotations if a.text.startswith("BHF:")]
+    assert [a.text for a in notes] == [
+        "BHF: n/m - sector-adjusted (ROE − cost of capital (9%))",
+        "BHF: n/m - sector-adjusted (Price / book)",
+        "BHF: N/A - Data Incomplete"]
+    assert [a.xref for a in notes] == ["x2 domain", "x3 domain", "x4 domain"]  # own row, not the figure's
+    assert [a.yref for a in notes] == ["y2 domain", "y3 domain", "y4 domain"]
+    assert all(a.x == 0 and a.xanchor == "left" and a.y == 1 and a.yanchor == "top" for a in notes)
+    # the subplot titles stay untouched (left-aligned, paper-anchored — not re-pointed at a row)
+    titles = out.fig.layout.annotations[:4]
+    assert [t.text for t in titles] == [label for _, label, _ in charts.PEER_METRICS]
+    assert all(t.xref == "paper" and t.yref == "paper" and t.x == 0 and t.xanchor == "left" for t in titles)
 
 
 def test_drawdown_history_indexes_both_to_100_on_one_axis():

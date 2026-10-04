@@ -309,9 +309,11 @@ def peer_strip(me: ScreenResult, peers: list[ScreenResult], source_note: str = "
         v, why = peer_metric(me, key)
         if v is None:
             excluded.append(f"{me.ticker} {label}: {why}")
-            fig.add_annotation(text=f"{me.ticker}: {why}", xref="x domain", yref="y domain", x=1, y=0.5,
-                               showarrow=False, xanchor="right", font=dict(color=theme.MUTED, size=11),
-                               row=row, col=1)
+            # Pinned to this row's own domain via row/col (a whole-figure "y domain" would stack every
+            # note in one spot), in the top headroom so it never crosses the mid-row dots.
+            fig.add_annotation(text=f"{me.ticker}: {why}", xref="x domain", yref="y domain",
+                               x=0, y=1, showarrow=False, xanchor="left", yanchor="top",
+                               font=dict(color=theme.MUTED, size=11), row=row, col=1)
         else:
             fig.add_trace(go.Scatter(x=[v * (100 if unit == "pts" else 1)], y=[0], mode="markers+text",
                                      name=me.ticker, text=[_fmt_metric(v, unit)], textposition="top center",
@@ -323,7 +325,10 @@ def peer_strip(me: ScreenResult, peers: list[ScreenResult], source_note: str = "
         if unit == "%":
             fig.update_xaxes(tickformat=".0%", row=row, col=1)
     _base(fig, 330, showlegend=False)
-    for a in fig.layout.annotations[:len(PEER_METRICS)]:
+    # The missing-metric notes were already anchored in place above; these are the four subplot
+    # titles (make_subplots appends them to layout.annotations first) — left-aligned like the
+    # other charts.
+    for a in fig.layout.annotations[:len(PEER_METRICS)]:  # the four subplot titles
         a.update(font=dict(size=12), xanchor="left", x=0)
     notes = [f"{len(peers)} peers (grey), {me.ticker} highlighted; hover for names"]
     if source_note:
