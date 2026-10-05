@@ -92,6 +92,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `SCREEN_PROGRESS_POLL_SECONDS` | 5 | Screener page progress refresh |
 | `SCREEN_REMIND_DAYS` | 7 | On app start, ask whether to run a new screen when the last completed one is older than this (or none has completed); offers Resume instead when the latest run was interrupted, and stays quiet while one is running |
 | `SCREEN_ETA_MIN_DONE` | 5 | Tickers finished before the Screener shows an estimated time left |
+| `SCREEN_STALL_WARN_MINUTES` | 10 | Warn on the Screener when an active run has screened no ticker for this many minutes |
 | `UNIVERSE_AS_OF_WARN_DAYS` | 120 | A universe list whose holdings date is older than this is marked on the Screener; its load failures are hinted as likely acquired or delisted since that date |
 | `CHANGES_LIST_MAX` | 8 | Tickers named per "Changes since last screen" card before "+n more" |
 | `HEATMAP_NEUTRAL_BAND` | 0.05 | Sensitivity heatmap: fair values within ±5% of the actual latest price are shaded neutral grey |
@@ -211,7 +212,7 @@ The universe is roughly 1,400 tickers, and a cold full fetch at the yfinance thr
   - **Incomplete:** nothing failed, but fewer than `MIN_METRICS_FOR_PASS` metrics were available. Never shown as Pass or Fail.
 - **Runs happen outside Streamlit.** `scripts/run_screen.py --lists cowz,tsx_composite,...` does the work and writes to the `screen_runs` and `screen_results` tables in SQLite.
   - It is resumable: an interrupted run continues from the last completed ticker when restarted with `--resume`.
-  - The Streamlit page never runs a full screen in the request. It reads the latest completed run, and its "Run new screen" button launches the script as a background process and polls the run's progress from the database.
+  - The Streamlit page never runs a full screen in the request. It reads the latest completed run; the "Run new screen" button records the run in the database the moment it is clicked, then launches the script as a background process and polls the run's progress from the database. Progress is shown in phases: preparing (health check, universe load), fetching latest prices, then per-ticker progress with an estimated time left; a run that has screened no ticker for `SCREEN_STALL_WARN_MINUTES` warns that it may have stalled, and a run whose process has died warns that it stopped.
 - **Every run records its own gaps.** `screen_runs` stores:
   - start and end time, and which lists were used;
   - tickers attempted, passed stage 1, passed stage 2, and failed to load (with the reason).

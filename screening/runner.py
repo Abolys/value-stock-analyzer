@@ -84,7 +84,8 @@ def _cache_stats(ctx: ScreenContext) -> tuple[int, int]:
 def run_screen(ctx: ScreenContext, lists: list[str] | None = None, resume: bool = False,
                health_fn: Callable[[DataProvider], HealthReport] = run_health_check,
                universe_dir=config.UNIVERSE_DIR, log_path: str | None = None,
-               progress: Callable[[str], None] | None = None) -> store.ScreenRun:
+               progress: Callable[[str], None] | None = None,
+               run_id: int = 0) -> store.ScreenRun:
     say = progress or (lambda msg: log.info(msg))
     db = ctx.db_path
     run: store.ScreenRun | None = None
@@ -103,6 +104,11 @@ def run_screen(ctx: ScreenContext, lists: list[str] | None = None, resume: bool 
             store.update_run(run.run_id, db, note=f"resume blocked by health check at {datetime.now():%Y-%m-%d %H:%M}",
                              health_failures=report.failures)
             return store.get_run(run.run_id, db)
+        if run_id:
+            # the app created the row on launch, before the health check; close it here
+            store.update_run(run_id, db, status=store.BLOCKED, health_failures=report.failures,
+                             ended_at=datetime.now().isoformat(timespec="seconds"))
+            return store.get_run(run_id, db)
         run_id = store.create_run(lists, store.BLOCKED, report.failures, path=db, log_path=log_path)
         return store.get_run(run_id, db)
 
@@ -110,7 +116,11 @@ def run_screen(ctx: ScreenContext, lists: list[str] | None = None, resume: bool 
     sources = dict(zip(universe["ticker"], universe["source"]))
     tickers = list(sources)
     if run is None:
-        run_id = store.create_run(lists, total=len(tickers), pid=os.getpid(), log_path=log_path, path=db)
+        if run_id:
+            # the app created the row on launch, before the health check and universe load
+            store.update_run(run_id, db, total=len(tickers), pid=os.getpid())
+        else:
+            run_id = store.create_run(lists, total=len(tickers), pid=os.getpid(), log_path=log_path, path=db)
         prior_refetched = prior_served = 0
     else:
         run_id = run.run_id

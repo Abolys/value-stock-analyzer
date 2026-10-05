@@ -91,6 +91,24 @@ def test_failed_health_check_blocks_the_run(tmp_path, universe):
     assert inner.count("get_info") == 0
 
 
+def test_failed_health_check_marks_the_precreated_row_blocked(tmp_path, universe):
+    ctx = ctx_for(Counting(), tmp_path)
+    rid = store.create_run(["watchlist"], total=0, path=ctx.db_path)  # the app created it on launch
+    blocked = lambda p: HealthReport(ok=False, failures=["SPY: prices failed"], checked_at=NOW)  # noqa: E731
+    run = run_screen(ctx, ["watchlist"], health_fn=blocked, universe_dir=universe("MSFT"), run_id=rid)
+    assert run.run_id == rid and run.status == store.BLOCKED and run.ended_at is not None
+    assert len(store.list_runs(ctx.db_path)) == 1  # no second row was created
+
+
+def test_run_uses_the_precreated_row_when_given_run_id(tmp_path, universe):
+    u = universe("MSFT", "JPM")
+    ctx = ctx_for(Counting(), tmp_path)
+    rid = store.create_run(["watchlist"], total=0, path=ctx.db_path)  # the app created it on launch
+    run = run_screen(ctx, ["watchlist"], health_fn=healthy, universe_dir=u, run_id=rid)
+    assert run.run_id == rid and run.status == store.COMPLETED and run.attempted == 2
+    assert len(store.list_runs(ctx.db_path)) == 1
+
+
 def test_run_writes_results_counts_and_officer_snapshots(tmp_path, universe):
     ctx = ctx_for(Counting(), tmp_path)
     run = run_screen(ctx, ["watchlist"], health_fn=healthy, universe_dir=universe("MSFT", "JPM", "NOPE"))

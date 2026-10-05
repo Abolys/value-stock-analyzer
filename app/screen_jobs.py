@@ -1,6 +1,10 @@
 """Launching screen runs from the app. The Streamlit page never screens in the
 request: it starts scripts/run_screen.py as a background process and polls the
-run's progress from the database."""
+run's progress from the database.
+
+A fresh run's screen_runs row is created here, at launch, so progress is visible
+from the first second -- while the script is still in its health check and
+universe load -- and a second launch is refused while one is in progress."""
 
 from __future__ import annotations
 
@@ -48,14 +52,32 @@ def interrupted_run(db_path=config.RUNS_DB_PATH) -> store.ScreenRun | None:
 
 
 def launch(lists: list[str] | None = None, resume: bool = False, db_path=config.RUNS_DB_PATH) -> Path:
+    """Starts the screen in the background and returns the log path. For a fresh run the
+    screen_runs row is created before the process starts, so the page can show its progress
+    from the first second and refuse a second launch while one is in progress."""
     if active_run(db_path):
         raise RuntimeError("a screen run is already in progress")
+    if not resume and not lists:
+        raise RuntimeError("choose at least one universe list")
     log = Path(config.SCREEN_LOG_DIR) / f"screen_{datetime.now():%Y%m%d_%H%M%S}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     cmd = [sys.executable, str(SCRIPT), "--db", str(db_path), "--log", str(log)]
-    cmd += ["--resume"] if resume else ["--lists", ",".join(lists or [])]
-    subprocess.Popen(cmd, cwd=ROOT, start_new_session=True, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, env=os.environ.copy())
+    run_id: int | None = None
+    try:
+        if resume:
+            cmd.append("--resume")
+        else:
+            run_id = store.create_run(lists or [], log_path=str(log), path=db_path)
+            cmd += ["--lists", ",".join(lists or []), "--run-id", str(run_id)]
+        proc = subprocess.Popen(cmd, cwd=ROOT, start_new_session=True, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, env=os.environ.copy())
+    except Exception as exc:  # the run must not look started when it isn't
+        if run_id is not None:
+            store.update_run(run_id, db_path, status=store.BLOCKED, note=f"launch failed: {exc}",
+                             ended_at=datetime.now().isoformat(timespec="seconds"))
+        raise RuntimeError(f"could not start the screen run: {exc}") from exc
+    if run_id is not None:
+        store.update_run(run_id, db_path, pid=proc.pid)
     return log
 
 

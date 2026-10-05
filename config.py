@@ -390,6 +390,7 @@ PRICE_HISTORY_PERIOD = "10y"
 EDGAR_MAX_REQUESTS_PER_SECOND = 10
 HEALTH_CHECK_TTL_MINUTES = 60
 SCREEN_PROGRESS_POLL_SECONDS = 5  # the Screener page re-reads run progress this often
+SCREEN_STALL_WARN_MINUTES = 10  # warn on the Screener when an active run has screened no ticker this long
 # On app start, ask to run a new screen when the last completed one started more than this many
 # days ago (or none has completed); "Not now" dismisses it for the session.
 SCREEN_REMIND_DAYS = 7

@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--resume", action="store_true", help="continue the latest interrupted or stopped run")
     ap.add_argument("--db", default=str(config.RUNS_DB_PATH), help="runs database path")
     ap.add_argument("--log", default=None, help="log file (the app passes one when it launches a run)")
+    ap.add_argument("--run-id", type=int, default=0,
+                    help="run row the app created on launch (0: create a new row, the CLI behaviour)")
     ap.add_argument("--universe-dir", default=str(config.UNIVERSE_DIR), help="folder with the universe CSVs")
     args = ap.parse_args(argv)
 
@@ -48,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [k for k in lists if k not in list_labels()]
     if unknown:
         ap.error(f"unknown list(s): {', '.join(unknown)}")
+    if args.run_id and args.resume:
+        ap.error("--run-id and --resume are mutually exclusive")
     if not lists and not args.resume:
         ap.error("give --lists or --resume")
 
@@ -55,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = ScreenContext(provider=provider, db_path=args.db, today=date.today(), valet_fetch=services.valet_fetch())
     try:
         run = run_screen(ctx, lists or None, resume=args.resume, log_path=args.log, progress=logging.info,
-                         universe_dir=Path(args.universe_dir))
+                         universe_dir=Path(args.universe_dir), run_id=args.run_id)
     except (RuntimeError, ValueError) as exc:
         logging.error("%s", exc)
         return 1

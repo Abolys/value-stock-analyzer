@@ -51,14 +51,35 @@ def run_header(shown: store.ScreenRun, latest: store.ScreenRun | None, results) 
 
 @st.fragment(run_every=config.SCREEN_PROGRESS_POLL_SECONDS)
 def run_progress() -> None:
-    run = screen_jobs.active_run(config.RUNS_DB_PATH)
+    """Live status of a background run, re-read from the database on every poll. Phases:
+    preparing (the row exists but the universe is not loaded yet), fetching latest prices,
+    then the per-ticker bar with an estimated time left. Warns when a run makes no progress
+    or has stopped without finishing."""
+    db = config.RUNS_DB_PATH
+    run = screen_jobs.active_run(db)
     if run is None:
+        paused = screen_jobs.interrupted_run(db)
+        if paused is not None:
+            where = (f"after {paused.attempted:,} of {paused.total:,} tickers "
+                     if paused.total else "before it could screen any ticker ")
+            st.warning(f"Screen run {paused.run_id} stopped ('{paused.status}') {where}— resume it below "
+                       "to continue where it left off.")
         return
-    left = sv.eta(run, datetime.now())
-    st.progress(run.attempted / run.total if run.total else 0.0,
-                text=f"Screen run {run.run_id}: {run.attempted:,} of {run.total:,} tickers "
-                     f"({run.passed_stage1:,} passed stage 1, {run.failed_to_load:,} failed to load)"
-                     + (f" · about {sv.fmt_duration(left)} left" if left is not None else " · estimating time left…"))
+    labels = ", ".join(list_labels().get(k, k) for k in run.lists) or "all lists"
+    if not run.total:
+        st.info(f"Screen run {run.run_id} ({labels}) is preparing: health check and universe load…")
+    elif not run.attempted:
+        st.info(f"Screen run {run.run_id} ({labels}): fetching latest prices for {run.total:,} tickers…")
+    else:
+        left = sv.eta(run, datetime.now())
+        st.progress(run.attempted / run.total if run.total else 0.0,
+                    text=f"Screen run {run.run_id}: {run.attempted:,} of {run.total:,} tickers "
+                         f"({run.passed_stage1:,} passed stage 1, {run.failed_to_load:,} failed to load)"
+                         + (f" · about {sv.fmt_duration(left)} left" if left is not None else " · estimating time left…"))
+    waited_min = (datetime.now() - run.started_at).total_seconds() / 60
+    if not run.attempted and waited_min > config.SCREEN_STALL_WARN_MINUTES:
+        st.warning(f"No tickers screened after {waited_min:.0f} minutes — the background run may have stalled "
+                   "(or the app's container slept while idle). It is still alive and will keep updating here.")
 
 
 def list_picker(has_completed: bool) -> None:
