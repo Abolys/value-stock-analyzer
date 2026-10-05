@@ -36,6 +36,10 @@ def _mirror_cloud_secrets() -> None:
 _mirror_cloud_secrets()
 
 import config  # noqa: E402
+from storage import baseline  # noqa: E402
+
+baseline.bootstrap_once()  # before anything opens a database: seed missing or outdated runtime DBs from baseline/
+
 from app import alert_jobs, auth, screen_jobs, services, ui  # noqa: E402
 from app import screener_view  # noqa: E402
 from app.views import accuracy, portfolio, screener, stock  # noqa: E402

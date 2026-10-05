@@ -4,18 +4,17 @@
 !.env.example
 
 # Local data, caches and databases.
-# Baseline for the deploy: storage/runs.db and the live caches are committed so
-# every Streamlit Cloud deploy starts with the latest screens, portfolio and
-# warm caches (data flows local -> Cloud; the Cloud app can read but not push).
+# The live databases are never committed: Streamlit Cloud cannot write to
+# git-tracked files. Instead a read-only snapshot lives in baseline/ (refresh it
+# with scripts/update_baseline.py); on start the app copies it into place when
+# a live file is missing (storage/baseline.py). Data flows local -> Cloud only.
 # Trade-off: binary blobs grow the repo history.
 *.db
-!storage/runs.db
+!baseline/*.db
 *.sqlite
 *.sqlite3
 .cache/
 data/cache/*
-!data/cache/cache.db
-!data/cache/llm_cache.db
 data/universe/raw/
 data/universe/refresh_status.json
 
@@ -39,6 +38,7 @@ Thumbs.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.baseline-sha
 
 # Streamlit local secrets
 .streamlit/secrets.toml

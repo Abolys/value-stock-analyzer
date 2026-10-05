@@ -28,6 +28,14 @@ def _temp_runs_db(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_baseline_seed(monkeypatch):
+    """The app seeds missing databases from baseline/ on start; tests keep their empty temp databases."""
+    from storage import baseline
+
+    monkeypatch.setattr(baseline, "bootstrap_baseline", lambda *a, **k: [])
+
+
+@pytest.fixture(autouse=True)
 def _no_llm_key(monkeypatch, request, tmp_path):
     """Offline tests never see a real API key, the Claude Code CLI or the real LLM cache;
     LLM calls go through mocks."""
