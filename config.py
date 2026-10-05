@@ -220,7 +220,7 @@ DA_CACHE_PRICE_BAND = 0.05
 # back to the Anthropic API when ANTHROPIC_API_KEY is set. Free-tier calls log at $0.
 FREE_LLM_BASE_URL = os.getenv("FREE_LLM_BASE_URL", "https://api.groq.com/openai/v1")
 FREE_LLM_API_KEY = os.getenv("FREE_LLM_API_KEY", "")
-FREE_LLM_MODEL = os.getenv("FREE_LLM_MODEL", "gpt-oss-120b")
+FREE_LLM_MODEL = os.getenv("FREE_LLM_MODEL", "openai/gpt-oss-120b")
 FREE_LLM_TIMEOUT_SECONDS = 120
 # LLM backend (CLAUDE.md Rule 4). "auto": the free tier when FREE_LLM_API_KEY is set (falling
 # back to the Anthropic API on a failed call when ANTHROPIC_API_KEY is set), else the Anthropic

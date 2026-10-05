@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     attempt INTEGER NOT NULL,
     outcome TEXT NOT NULL,        -- ok | invalid: <reason> | error: <reason>
     created_at TEXT NOT NULL,
-    backend TEXT NOT NULL DEFAULT 'api',     -- api | claude_code
+    backend TEXT NOT NULL DEFAULT 'api',     -- api | free | claude_code
     list_price_cost REAL NOT NULL DEFAULT 0  -- estimated cost at API list prices
 );
 -- Phase 6: portfolio, thesis journal and alerts (helpers in portfolio/store.py)
