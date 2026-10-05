@@ -458,13 +458,17 @@ def llm_notice() -> LLMClient:
                    "the owner hasn't analysed shows them as not available.")
         return LLMClient(db_path=config.RUNS_DB_PATH, backend="none")
     llm = LLMClient(db_path=config.RUNS_DB_PATH)
-    if llm.backend == "claude_code":
+    if llm.backend == "free":
+        st.caption(f"LLM lenses run on the free tier ({llm.model}): no charge. A failed free-tier call (rate "
+                   "limit, outage) falls back to the Anthropic API, which is billed; each call is logged with "
+                   "its backend and cost.")
+    elif llm.backend == "claude_code":
         st.caption("LLM lenses run through the Claude Code CLI on your Claude subscription (no ANTHROPIC_API_KEY "
                    "set): no API charge; the list-price equivalent is logged.")
     elif not llm.configured:
-        st.info("No ANTHROPIC_API_KEY and no Claude Code CLI found: the Moat and Devil's Advocate lenses will "
-                "return \"Insufficient data - LLM not configured\" (cached answers are still used). "
-                "Set CLAUDE_CODE_CLI in .env if the CLI is installed somewhere unusual.")
+        st.info("No FREE_LLM_API_KEY, no ANTHROPIC_API_KEY and no Claude Code CLI found: the Moat and Devil's "
+                "Advocate lenses will return \"Insufficient data - LLM not configured\" (cached answers are still "
+                "used). Set CLAUDE_CODE_CLI in .env if the CLI is installed somewhere unusual.")
     return llm
 
 

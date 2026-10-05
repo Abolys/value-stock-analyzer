@@ -214,11 +214,20 @@ LLM_CACHE_DB_PATH = DATA_DIR / "cache" / "llm_cache.db"
 # else in the payload changed. The model still sees the exact price on a fresh call.
 DA_CACHE_PRICE_BAND = 0.05
 
-# LLM backend (CLAUDE.md Rule 4). "auto": the Anthropic API when ANTHROPIC_API_KEY is set,
-# otherwise the Claude Code CLI (`claude -p`, the user's Claude subscription) when it can be
-# found. "api" / "claude_code" force one; "none" disables the LLM lenses.
+# Free-tier LLM backend (CLAUDE.md Rule 4): any OpenAI-compatible chat-completions endpoint,
+# Groq's free dev tier by default (no card needed: https://console.groq.com/keys). Primary for
+# the LLM lenses when FREE_LLM_API_KEY is set; a failed call (auth, rate limit, outage) falls
+# back to the Anthropic API when ANTHROPIC_API_KEY is set. Free-tier calls log at $0.
+FREE_LLM_BASE_URL = os.getenv("FREE_LLM_BASE_URL", "https://api.groq.com/openai/v1")
+FREE_LLM_API_KEY = os.getenv("FREE_LLM_API_KEY", "")
+FREE_LLM_MODEL = os.getenv("FREE_LLM_MODEL", "gpt-oss-120b")
+FREE_LLM_TIMEOUT_SECONDS = 120
+# LLM backend (CLAUDE.md Rule 4). "auto": the free tier when FREE_LLM_API_KEY is set (falling
+# back to the Anthropic API on a failed call when ANTHROPIC_API_KEY is set), else the Anthropic
+# API, else the Claude Code CLI (`claude -p`, the user's Claude subscription). "api" /
+# "claude_code" / "free" force one; "none" disables the LLM lenses.
 LLM_BACKEND = os.getenv("LLM_BACKEND", "auto").strip().lower() or "auto"
-LLM_BACKENDS = ("auto", "api", "claude_code", "none")
+LLM_BACKENDS = ("auto", "api", "claude_code", "free", "none")
 # The CLI: CLAUDE_CODE_CLI in .env wins; else `claude` on PATH; else these globs (newest match),
 # which cover the binary bundled with the VS Code extension (including Flatpak VS Code).
 CLAUDE_CODE_CLI = os.getenv("CLAUDE_CODE_CLI", "")

@@ -40,6 +40,8 @@ def _no_llm_key(monkeypatch, request, tmp_path):
         return
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("FREE_LLM_API_KEY", "")
+    monkeypatch.setattr(config, "FREE_LLM_API_KEY", "")
     monkeypatch.setattr(config, "LLM_BACKEND", "api")  # never fall back to the real CLI offline
 
 

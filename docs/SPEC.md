@@ -114,7 +114,8 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `LLM_CACHE_DB_PATH` | `data/cache/llm_cache.db` | Permanent LLM response cache keyed by (ticker, lens, hash of model + payload, prompt version) |
 | `LEVERAGE_TREND_FLAT_BAND_FINANCIALS` | 1.0 | Macro leverage trend for financials and REITs (liabilities ÷ equity): ±1.0x is flat |
 | `DIVIDEND_EARNINGS_PAYOUT_MAX_FINANCIALS` | 1.0 | Dividend at risk for financials and REITs when earnings payout exceeds this (FCF payout is n/m for them) |
-| `LLM_BACKEND` | `auto` | `auto`: the Anthropic API when `ANTHROPIC_API_KEY` is set, else the Claude Code CLI (`claude -p`, Claude subscription); `api` / `claude_code` force one; `none` disables the LLM lenses |
+| `LLM_BACKEND` | `auto` | `auto`: the free tier when `FREE_LLM_API_KEY` is set (a failed free-tier call falls back to the Anthropic API when `ANTHROPIC_API_KEY` is set), else the Anthropic API, else the Claude Code CLI (`claude -p`, Claude subscription); `api` / `claude_code` / `free` force one; `none` disables the LLM lenses |
+| `FREE_LLM_BASE_URL` / `FREE_LLM_API_KEY` / `FREE_LLM_MODEL` / `FREE_LLM_TIMEOUT_SECONDS` | Groq endpoint / `""` / `gpt-oss-120b` / 120 | the free-tier OpenAI-compatible endpoint (Groq's free dev tier by default); free-tier calls log at $0 with backend `free` |
 | `CLAUDE_CODE_CLI` / `CLAUDE_CODE_CLI_GLOBS` / `CLAUDE_CODE_TIMEOUT_SECONDS` | `.env` path, else `claude` on PATH, else the VS Code extension's bundled binary / 600 | Locating and running the CLI fallback; its calls log a billed cost of $0 plus the list-price equivalent |
 | `INDUSTRY_THREAT_HINTS` / `SECTOR_THREAT_HINTS` | e.g. Apparel Retail → brand / private-label erosion; Software → AI disruption; Banks → regulation and rates | Moat prompt: the sector-threat hint (industry prefix first, then sector) |
 | `ALERT_PIOTROSKI_DROP` | 2 | Alert when Piotroski falls this far below its baseline (the purchase snapshot for holdings, the first value seen for watchlist names); the baseline resets after an alert and rises with the score |
@@ -368,7 +369,7 @@ Score = how well the bull case survives the attack. Rubric (`DA_RUBRIC`, version
 Same evidence rule: at least 2 specific facts from the payload.
 
 ### Calibration
-- `tests/test_calibration.py`, marked `@pytest.mark.live` (calls the configured LLM backend: the API, or the Claude Code CLI without a key; run on demand, not in the phase checklist): scores the golden tickers with the current prompts and saves the results to `tests/calibration/<prompt_version>.json`.
+- `tests/test_calibration.py`, marked `@pytest.mark.live` (calls the configured LLM backend: the free tier with its API fallback, the API, or the Claude Code CLI; run on demand, not in the phase checklist): scores the golden tickers with the current prompts and saves the results to `tests/calibration/<prompt_version>.json`.
 - It builds every LLM payload from the saved offline fixtures, never live data. Otherwise a new quarter's numbers would show up as a score shift and be blamed on the prompt. Only the prompt may differ between calibration runs.
 - When a Moat or Devil's Advocate prompt version changes, the test compares against the previous version's file and fails on any ticker whose score moved by more than `CALIBRATION_MAX_SHIFT` (2.0), listing each shift. A deliberate re-rating is accepted by committing the new file.
 
