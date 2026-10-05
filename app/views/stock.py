@@ -453,7 +453,15 @@ def draw_all(lay: Layout, e: Entry, provider) -> None:
 
 
 def llm_notice() -> LLMClient:
-    if not auth.is_owner():  # a shared viewer never spends the owner's API key or Claude subscription
+    if not auth.is_owner():
+        # A shared viewer runs on the free tier only - never the owner's API key or Claude
+        # subscription: a failed free-tier call leaves the lens "not available", nothing is billed.
+        viewer = LLMClient(db_path=config.RUNS_DB_PATH, backend="free", paid_fallback=False)
+        if viewer.configured:
+            st.caption(f"Viewing read-only: the Moat and Devil's Advocate lenses run on the free tier "
+                       f"({viewer.model}) only - no charge. If the free tier is unavailable, they show "
+                       "as not available. Cached answers are still used.")
+            return viewer
         st.caption("Viewing read-only: the Moat and Devil's Advocate lenses show cached answers only; a ticker "
                    "the owner hasn't analysed shows them as not available.")
         return LLMClient(db_path=config.RUNS_DB_PATH, backend="none")

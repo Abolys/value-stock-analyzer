@@ -1,5 +1,6 @@
 """Sharing the app with a link: remote visitors must sign in; the viewer password is read-only
-(no edits, no screens or alert checks, no LLM calls, nothing stored); feedback reaches the owner."""
+(no edits, no screens or alert checks, nothing stored; LLM lenses run on the free tier only -
+never the owner's API key or Claude subscription); feedback reaches the owner."""
 
 import os
 from datetime import date, datetime
@@ -162,6 +163,82 @@ def test_viewer_analysis_makes_no_llm_calls_and_is_not_stored(monkeypatch):
     assert any("cached answers only" in c.value for c in at.caption)
     assert not any(b.label in ("Re-run analysis", "Add to portfolio") for b in at.button)
     assert history.load_history("LULU") == []  # nothing stored in the owner's run history
+
+
+def test_viewer_llm_client_runs_on_the_free_tier_only(monkeypatch):
+    """With both keys set, a viewer's LLM client is the free tier with the paid fallback off, so a
+    viewer can use the free model but never spends the owner's API key."""
+    from app import auth
+    from app.views import stock
+
+    monkeypatch.setenv("FREE_LLM_API_KEY", "sk-free")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+    monkeypatch.setattr(config, "LLM_BACKEND", "auto")
+
+    def page():
+        import streamlit as st
+        from app import auth
+        from app.views import stock
+
+        st.session_state[auth.ROLE_KEY] = auth.VIEWER
+        st.session_state["llm_client"] = stock.llm_notice()
+
+    at = AppTest.from_function(page, default_timeout=60)
+    at.run()
+    assert not at.exception
+    client = at.session_state["llm_client"]
+    assert client.backend == "free" and client._fallback is None
+    assert any("run on the free tier" in c.value for c in at.caption)
+
+
+def test_viewer_without_a_free_key_stays_cache_only(monkeypatch):
+    """No FREE_LLM_API_KEY: the viewer's lenses are cached answers only (no LLM calls at all)."""
+    from app import auth
+    from app.views import stock
+
+    monkeypatch.setenv("FREE_LLM_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+
+    def page():
+        import streamlit as st
+        from app import auth
+        from app.views import stock
+
+        st.session_state[auth.ROLE_KEY] = auth.VIEWER
+        st.session_state["llm_client"] = stock.llm_notice()
+
+    at = AppTest.from_function(page, default_timeout=60)
+    at.run()
+    assert not at.exception
+    client = at.session_state["llm_client"]
+    assert client.backend == "none" and not client.configured
+    assert any("cached answers only" in c.value for c in at.caption)
+
+
+def test_owner_llm_client_keeps_the_paid_fallback(monkeypatch):
+    """The owner's client keeps the free-tier → billed-API fallback (CLAUDE.md: only the owner's
+    sessions may spend the API key)."""
+    from app import auth
+    from app.views import stock
+
+    monkeypatch.setenv("FREE_LLM_API_KEY", "sk-free")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+    monkeypatch.setattr(config, "LLM_BACKEND", "auto")
+
+    def page():
+        import streamlit as st
+        from app import auth
+        from app.views import stock
+
+        st.session_state[auth.ROLE_KEY] = auth.OWNER
+        st.session_state["llm_client"] = stock.llm_notice()
+
+    at = AppTest.from_function(page, default_timeout=60)
+    at.run()
+    assert not at.exception
+    client = at.session_state["llm_client"]
+    assert client.backend == "free" and client._fallback is not None
+    assert any("falls back to the Anthropic API" in c.value for c in at.caption)
 
 
 def test_owner_password_gives_full_access_and_sees_feedback(monkeypatch):

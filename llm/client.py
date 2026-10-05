@@ -14,7 +14,10 @@
 - Backend (LLM_BACKEND, default "auto"): the free tier (llm/free_api.py,
   FREE_LLM_API_KEY) first, logged at a billed cost of $0 with backend "free"; a failed
   free-tier call (bad auth, rate limit, outage) falls back to the Anthropic API when
-  ANTHROPIC_API_KEY is set. Else the Anthropic API; else the Claude Code CLI on the
+  ANTHROPIC_API_KEY is set. The app enables that fallback only for the owner; a shared
+  viewer's client is built with paid_fallback=False, so it stays on the free tier and a
+  failed call shows the lens as not available (nothing is billed). Else the Anthropic API;
+  else the Claude Code CLI on the
   user's subscription (llm/claude_code.py), logged with a billed cost of $0 and its
   list-price estimate. None available → "Insufficient data - LLM not configured", no call.
 
@@ -98,7 +101,8 @@ def choose_backend(api_key: str | None = None, backend: str | None = None,
 class LLMClient:
     def __init__(self, api: Any = None, model: str | None = None, cache: LLMCache | None = None,
                  db_path: Any = None, api_key: str | None = None, analysis_id: int | None = None,
-                 record: Callable[[LLMCallRecord], None] | None = None, backend: str | None = None):
+                 record: Callable[[LLMCallRecord], None] | None = None, backend: str | None = None,
+                 paid_fallback: bool | None = None):
         if api is None:
             api, self.backend = choose_backend(api_key, backend)
         else:
@@ -108,8 +112,10 @@ class LLMClient:
                                else config.ANTHROPIC_MODEL)
         # When the primary is the free tier and the Anthropic API is also configured, a failed
         # free-tier call (bad auth, rate limit, outage) is retried on the API, which is billed.
+        # paid_fallback=False (a shared viewer's session) keeps it on the free tier only: a
+        # failed call fails the analysis instead of silently spending the owner's API key.
         self._fallback: tuple[Any, str] | None = None
-        if self.backend == free_api.BACKEND:
+        if self.backend == free_api.BACKEND and paid_fallback is not False:
             key = os.getenv("ANTHROPIC_API_KEY", config.ANTHROPIC_API_KEY)
             if key:
                 self._fallback = (anthropic.Anthropic(api_key=key, timeout=config.LLM_TIMEOUT_SECONDS), API)

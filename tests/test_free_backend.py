@@ -189,6 +189,23 @@ def test_no_fallback_without_an_api_key(tmp_path, monkeypatch):
     assert len(recs) == 1 and recs[0].backend == "free"
 
 
+def test_paid_fallback_disabled_is_free_tier_only(tmp_path, monkeypatch):
+    """A shared viewer's client (paid_fallback=False) never touches the owner's billed API, even
+    when it is configured: a failed free-tier call fails the analysis at $0."""
+    monkeypatch.setenv("FREE_LLM_API_KEY", "sk-free")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+    monkeypatch.setattr(config, "LLM_BACKEND", "free")
+    llm = LLMClient(db_path=tmp_path / "runs.db", paid_fallback=False)
+    assert llm.backend == "free" and llm._fallback is None
+    llm.api = free_api.FreeAPI("sk-free",
+                               session=_Session([_Resp(status_code=429, text="rate limited")]))
+    result = llm.run(ticker="T", lens="moat", prompt_version="moat-v1", system="s", user="u",
+                     schema=MoatResponse, cache_key="k")
+    assert not result.ok and "429" in result.status
+    recs = llm_store.calls(path=tmp_path / "runs.db")
+    assert len(recs) == 1 and recs[0].backend == "free" and recs[0].cost == 0.0
+
+
 def test_schema_rejection_retries_on_the_free_backend_not_the_api(tmp_path, monkeypatch):
     monkeypatch.setenv("FREE_LLM_API_KEY", "sk-free")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
