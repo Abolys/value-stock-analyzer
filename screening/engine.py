@@ -119,7 +119,7 @@ def screen_ticker_full(ctx: ScreenContext, ticker: str, sources: str = "", price
         info = ctx.provider.get_info(ticker)
     except ProviderError as exc:
         return failed_to_load(ticker, sources, f"info: {exc}"), None, None
-    if ctx.save_snapshots:
+    if ctx.save_snapshots and not info.is_fallback:  # a rebuilt info has no officers to snapshot
         save_officer_snapshot(ticker, info, when=ctx.today, path=ctx.db_path)
     if price is None:
         price = prices.actual_latest_price(ctx.provider, ticker)

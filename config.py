@@ -21,6 +21,10 @@ load_dotenv(ROOT / ".env")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-5"
 SEC_USER_AGENT = os.getenv("SEC_USER_AGENT", "")
+# Optional: Finnhub's free tier (https://finnhub.io/register) fills sector, industry, reporting currency
+# and country when Yahoo refuses `info` requests (data/info_fallback.py). Without it the fallback uses
+# SEC EDGAR and Yahoo's price data only.
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 
 
 # --------------------------------------------------------------------------
@@ -399,6 +403,10 @@ PRICE_HISTORY_PERIOD = "10y"
 EDGAR_MAX_REQUESTS_PER_SECOND = 10
 HEALTH_CHECK_TTL_MINUTES = 60
 HEALTH_CHECK_RETRIES = 0  # the probe fails fast (banner) instead of blocking the page through the back-off
+# After Yahoo refuses an `info` request (the health check or a live call), skip Yahoo `info` for this
+# long and go straight to the cached copy or the fallback sources, instead of waiting through the back-off.
+INFO_BLOCK_MINUTES = 60
+FINNHUB_MAX_REQUESTS_PER_SECOND = 1  # free tier: 60 calls a minute
 SCREEN_PROGRESS_POLL_SECONDS = 5  # the Screener page re-reads run progress this often
 SCREEN_STALL_WARN_MINUTES = 10  # warn on the Screener when an active run has screened no ticker this long
 # On app start, ask to run a new screen when the last completed one started more than this many
@@ -473,6 +481,112 @@ SUBSECTOR_RULES = [
     ("Insurance", "insurer"),
 ]
 SUBSECTOR_DEFAULT = "other_financial"
+
+# Fallback sector and industry (data/info_fallback.py) when Yahoo `info` is unavailable, in yfinance's
+# own labels so sector routing (SUBSECTOR_RULES) and SECTOR_CYCLICALITY keep working.
+# SEC SIC code ranges, first match wins: (low, high, yfinance sector, industry). An industry of None
+# uses the SEC's own SIC description, labelled as such. Financial ranges name an industry that matches
+# a SUBSECTOR_RULES prefix, so banks, REITs and insurers get their sector-adjusted treatment.
+SIC_SECTOR_RULES = [
+    (6798, 6798, "Real Estate", "REIT - Diversified"),
+    (6020, 6039, "Financial Services", "Banks - Regional"),
+    (6300, 6411, "Financial Services", "Insurance - Diversified"),
+    (6100, 6199, "Financial Services", "Credit Services"),
+    (6200, 6299, "Financial Services", "Capital Markets"),
+    (6500, 6599, "Real Estate", "Real Estate Services"),
+    (6000, 6799, "Financial Services", "Asset Management"),
+    (1300, 1399, "Energy", None),
+    (1200, 1299, "Energy", None),
+    (2900, 2999, "Energy", None),
+    (1000, 1499, "Basic Materials", None),
+    (100, 999, "Consumer Defensive", None),
+    (1500, 1799, "Industrials", None),
+    (2830, 2836, "Healthcare", None),
+    (2840, 2844, "Consumer Defensive", None),
+    (2000, 2199, "Consumer Defensive", None),
+    (2200, 2399, "Consumer Cyclical", None),
+    (2500, 2599, "Consumer Cyclical", None),
+    (2700, 2799, "Communication Services", None),
+    (2400, 3399, "Basic Materials", None),
+    (3570, 3579, "Technology", None),
+    (3630, 3639, "Consumer Cyclical", None),
+    (3600, 3699, "Technology", None),
+    (3714, 3714, "Consumer Cyclical", "Auto Parts"),
+    (3711, 3716, "Consumer Cyclical", "Auto Manufacturers"),
+    (3840, 3851, "Healthcare", None),
+    (3800, 3899, "Technology", None),
+    (3400, 3799, "Industrials", None),
+    (3900, 3999, "Consumer Cyclical", None),
+    (4512, 4513, "Industrials", "Airlines"),
+    (4800, 4899, "Communication Services", None),
+    (4900, 4999, "Utilities", None),
+    (4000, 4799, "Industrials", None),
+    (5122, 5122, "Healthcare", None),
+    (5140, 5149, "Consumer Defensive", None),
+    (5000, 5199, "Industrials", None),
+    (5400, 5499, "Consumer Defensive", None),
+    (5912, 5912, "Healthcare", None),
+    (5200, 5999, "Consumer Cyclical", None),
+    (7000, 7099, "Consumer Cyclical", "Lodging"),
+    (7370, 7379, "Technology", None),
+    (7800, 7899, "Communication Services", None),
+    (7200, 7299, "Consumer Cyclical", None),
+    (7500, 7999, "Consumer Cyclical", None),
+    (7300, 7399, "Industrials", None),
+    (8000, 8099, "Healthcare", None),
+    (8100, 8999, "Industrials", None),
+]
+# Finnhub's `finnhubIndustry` → (yfinance sector, industry or None). Finnhub has no REIT label, so its
+# "Real Estate" gets the default real-estate treatment unless the SEC SIC code says REIT. An industry
+# not listed here leaves the sector N/A and is logged so new labels get noticed.
+FINNHUB_INDUSTRY_SECTORS = {
+    "Banking": ("Financial Services", "Banks - Regional"),
+    "Insurance": ("Financial Services", "Insurance - Diversified"),
+    "Financial Services": ("Financial Services", "Capital Markets"),
+    "Real Estate": ("Real Estate", None),
+    "Technology": ("Technology", None),
+    "Semiconductors": ("Technology", "Semiconductors"),
+    "Communications": ("Technology", None),
+    "Electrical Equipment": ("Industrials", None),
+    "Pharmaceuticals": ("Healthcare", None),
+    "Biotechnology": ("Healthcare", None),
+    "Health Care": ("Healthcare", None),
+    "Life Sciences Tools & Services": ("Healthcare", None),
+    "Media": ("Communication Services", None),
+    "Telecommunication": ("Communication Services", None),
+    "Energy": ("Energy", None),
+    "Oil & Gas": ("Energy", None),
+    "Metals & Mining": ("Basic Materials", None),
+    "Chemicals": ("Basic Materials", None),
+    "Paper & Forest": ("Basic Materials", None),
+    "Packaging": ("Basic Materials", None),
+    "Utilities": ("Utilities", None),
+    "Retail": ("Consumer Cyclical", None),
+    "Automobiles": ("Consumer Cyclical", "Auto Manufacturers"),
+    "Auto Components": ("Consumer Cyclical", "Auto Parts"),
+    "Hotels, Restaurants & Leisure": ("Consumer Cyclical", None),
+    "Textiles, Apparel & Luxury Goods": ("Consumer Cyclical", None),
+    "Leisure Products": ("Consumer Cyclical", None),
+    "Diversified Consumer Services": ("Consumer Cyclical", None),
+    "Distributors": ("Consumer Cyclical", None),
+    "Consumer products": ("Consumer Defensive", None),
+    "Food Products": ("Consumer Defensive", None),
+    "Beverages": ("Consumer Defensive", None),
+    "Tobacco": ("Consumer Defensive", None),
+    "Airlines": ("Industrials", "Airlines"),
+    "Aerospace & Defense": ("Industrials", None),
+    "Machinery": ("Industrials", None),
+    "Building": ("Industrials", None),
+    "Construction": ("Industrials", None),
+    "Industrial Conglomerates": ("Industrials", None),
+    "Road & Rail": ("Industrials", None),
+    "Marine": ("Industrials", None),
+    "Logistics & Transportation": ("Industrials", None),
+    "Transportation Infrastructure": ("Industrials", None),
+    "Professional Services": ("Industrials", None),
+    "Commercial Services & Supplies": ("Industrials", None),
+    "Trading Companies & Distributors": ("Industrials", None),
+}
 
 # --------------------------------------------------------------------------
 # Value-trap, valuation and ownership signals

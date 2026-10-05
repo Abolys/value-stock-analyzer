@@ -87,6 +87,37 @@ class YFinanceProvider(DataProvider):
             statuses[fs.canonical] = st
         return InfoResult(ticker=ticker, values=values, statuses=statuses, raw=raw, provider=PROVIDER)
 
+    def get_quote_profile(self, ticker: str) -> dict[str, Any]:
+        """Currency, exchange, quote type, name, shares and market cap from Yahoo's chart data (yfinance
+        `fast_info` and the history metadata), the request behind prices. Used by the info fallback when
+        Yahoo refuses `info`; keys are canonical info names, absent when Yahoo gave nothing."""
+        t = self._t(ticker)
+
+        def fetch() -> dict[str, Any]:
+            fi = t.fast_info
+            out: dict[str, Any] = {}
+            for canonical, key in fm.YF_FAST_INFO_KEYS.items():
+                try:
+                    v = fi[key]
+                except Exception:  # each key is its own lookup; one failing (e.g. shares) keeps the rest
+                    continue
+                if not is_missing(v) and v != "":
+                    out[canonical] = v
+            try:
+                meta = t.history_metadata or {}
+            except Exception:
+                meta = {}
+            for canonical, keys in fm.YF_HISTORY_METADATA_KEYS.items():
+                v = next((meta[k] for k in keys if meta.get(k)), None)
+                if v is not None and canonical not in out:
+                    out[canonical] = v
+            return out
+
+        out = self._call(fetch)
+        if not out.get("currency"):
+            raise ProviderError(f"Yahoo chart data has no currency for {ticker}")
+        return out
+
     def get_statement(self, ticker: str, kind: StatementKind, freq: Freq) -> Statement:
         attr = fm.YF_STATEMENT_ATTRS[(kind, freq)]
         df = self._call(lambda: getattr(self._t(ticker), attr))

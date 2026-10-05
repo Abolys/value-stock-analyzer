@@ -19,7 +19,7 @@ from app.charts import ChartOut
 from data import prices
 from data.insiders import COVERAGE_NONE
 from data.leadership import NO_SOURCE
-from data.provider import DataProvider, ProviderError
+from data.provider import FALLBACK_PROVIDER, DataProvider, ProviderError
 from screening.models import ScreenResult
 from storage import screen_store
 
@@ -109,6 +109,9 @@ def header_tags(run: AnalysisRun) -> list[Tag]:
                             "sector-adjusted metrics are used"))
     if run.stale:
         tags.append(Tag(text="Fundamentals may be stale", kind="warning", tip=run.stale_label))
+    if FALLBACK_PROVIDER in run.providers:
+        tags.append(Tag(text="Company info: fallback sources", kind="warning",
+                        tip="Yahoo refused the company-info request; see the note below for each value's source"))
     if s is not None and s.asset_floor is not None and s.asset_floor.net_net:
         tags.append(Tag(text="Net-net", kind="success", tip=s.asset_floor.burn_line or "NCAV ≥ market cap"))
     return tags

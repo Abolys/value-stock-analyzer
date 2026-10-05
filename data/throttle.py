@@ -80,3 +80,4 @@ def with_retries(fn: Callable[[], T], *, retries: int = config.FETCH_MAX_RETRIES
 
 YF_THROTTLE = MinIntervalThrottle(config.YF_MIN_SECONDS_BETWEEN_CALLS)
 EDGAR_LIMITER = RateLimiter(config.EDGAR_MAX_REQUESTS_PER_SECOND)
+FINNHUB_LIMITER = RateLimiter(config.FINNHUB_MAX_REQUESTS_PER_SECOND)

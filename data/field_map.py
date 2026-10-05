@@ -194,6 +194,23 @@ def resolve_info(info: dict[str, Any] | None, canonical: str) -> tuple[Any, str]
     return None, na_field_not_found(canonical)
 
 
+# Yahoo chart data (yfinance `fast_info` keys and history metadata), read by the info fallback when Yahoo
+# refuses `info`. Verified against yfinance 1.7.0 (CNR.TO, MSFT) in 2026-10.
+YF_FAST_INFO_KEYS = {
+    "currency": "currency",
+    "exchange": "exchange",
+    "quote_type": "quoteType",
+    "shares_outstanding": "shares",
+    "market_cap": "marketCap",
+}
+YF_HISTORY_METADATA_KEYS = {
+    "long_name": ("longName", "shortName"),
+    "exchange": ("fullExchangeName", "exchangeName"),
+    "quote_type": ("instrumentType",),
+    "currency": ("currency",),
+}
+
+
 def resolve_row_label(index: pd.Index | list[str], canonical: str) -> str | None:
     """The first alias present in a statement's row index, or None."""
     labels = set(index)

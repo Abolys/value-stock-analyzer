@@ -18,6 +18,9 @@ StatementKind = Literal["income", "balance", "cashflow"]
 Freq = Literal["annual", "quarterly"]
 
 
+FALLBACK_PROVIDER = "fallback"  # InfoResult.provider of an info rebuilt from other sources
+
+
 class ProviderError(Exception):
     """A fetch failed (network, throttling, empty response)."""
 
@@ -34,6 +37,19 @@ class InfoResult(BaseModel):
     statuses: dict[str, str] = Field(default_factory=dict)
     raw: dict[str, Any] = Field(default_factory=dict)  # kept for the officer snapshot and debugging
     provider: str = ""
+    # Where each value came from when it is not Yahoo `info` (the fallback, data/info_fallback.py):
+    # canonical → source label, shown next to the value.
+    sources: dict[str, str] = Field(default_factory=dict)
+
+    def __setstate__(self, state: Any) -> None:
+        # Entries pickled into the disk cache before `sources` existed load with it empty.
+        if isinstance(state, dict) and isinstance(state.get("__dict__"), dict):
+            state["__dict__"].setdefault("sources", {})
+        super().__setstate__(state)
+
+    @property
+    def is_fallback(self) -> bool:
+        return self.provider == FALLBACK_PROVIDER
 
     def get(self, canonical: str) -> Any:
         return self.values.get(canonical)

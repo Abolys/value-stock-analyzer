@@ -76,6 +76,9 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `LEADERSHIP_KEYWORD_WINDOW_WORDS` / `LEADERSHIP_NEAR_ROLE_WORDS` | 12 / 2 | 6-K pre-filter: a departure keyword must fall within 12 words of a CEO/CFO title ("interim" within 2), so quarterly reports that merely mention the CEO, "interim" statements and "retirement" benefits don't reach the LLM |
 | `QUARTER_GAP_DAYS` | 80–100 | Consecutive quarters for the TTM sum must be this far apart; otherwise the latest fiscal year is used ("annual, not TTM") |
 | `HEALTH_CHECK_TTL_MINUTES` | 60 | A health-check result is reused this long at app start |
+| `INFO_BLOCK_MINUTES` | 60 | After Yahoo refuses an `info` request (health check or a live call), skip Yahoo `info` this long: the saved copy or the info fallback is used without waiting through the back-off |
+| `FINNHUB_MAX_REQUESTS_PER_SECOND` | 1 | Finnhub free tier (60 calls a minute), info fallback only |
+| `SIC_SECTOR_RULES` / `FINNHUB_INDUSTRY_SECTORS` | SEC SIC ranges and Finnhub industries → yfinance sector and industry labels (see Data sources) | Info fallback: financial ranges name industries that match `SUBSECTOR_RULES`, so banks, REITs and insurers keep their treatment |
 | `HEALTH_CHECK_RETRIES` | 0 | Retries per yfinance call in the health check: a probe fails fast and shows the banner instead of blocking the page through the back-off |
 | `RISK_FREE_QUOTE_RANGE` | 0–20 | Sanity range for a quoted 10-year yield in percent (`^TNX` is quoted in percent, verified 2026-09) |
 | `GRAHAM_MULTIPLIER` | 22.5 | Graham Number = √(22.5 × EPS × book value per share) |
@@ -135,6 +138,13 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 ## Data sources and their limits
 
 - **yfinance:** daily prices, splits, ~4 years of annual and ~5 quarters of financials, `info` (sector, industry, business summary, currencies), `calendar` (next earnings date), `get_shares_full()` for share-count history (fall back to annual diluted shares), `^TNX` for the US 10-year Treasury yield (verify the scale when implementing).
+- **Info fallback (`data/info_fallback.py`), when Yahoo refuses `info` requests** (common on shared cloud hosts such as Streamlit Cloud, while its price and statement requests still work). Order for a ticker's info: a fresh cached Yahoo copy; live Yahoo (skipped for `INFO_BLOCK_MINUTES` once a refusal is seen); an expired Yahoo copy, shown with its age; only then the rebuilt info, cached for a day so Yahoo is asked again. The rebuilt info has provider `fallback` and labels every value with its source; the Stock page shows a "Company info: fallback sources" tag and a note listing them, and the banner says Yahoo is refusing company info instead of suggesting a yfinance upgrade. Sources, first one wins per field:
+  - Yahoo chart data (yfinance `fast_info` and history metadata): trading currency, exchange, quote type, name, shares, market cap.
+  - SEC EDGAR submissions and XBRL (SEC filers, including the mapped TSX names): SIC code → sector and industry via `SIC_SECTOR_RULES`; reporting currency from the XBRL money units; name.
+  - Finnhub `stock/profile2`, free tier, only with `FINNHUB_API_KEY`: sector and industry via `FINNHUB_INDUSTRY_SECTORS` (Finnhub has no REIT label, so SEC's SIC 6798 decides REITs), reporting currency, country, name. An unmapped Finnhub industry is logged.
+  - The statements: trailing EPS, FCF, EBITDA, revenue (TTM, Rule 3b labels), debt and cash (latest quarter), book value per common share (equity − preferred, ÷ shares), latest fiscal year and quarter ends.
+  - Dividend history: 12-month dividend rate (only when reporting and trading currency agree, since the info field is converted as reporting currency) and the latest ex-date.
+  - No source: business summary, officers (no officer change is inferred from a snapshot without names), insider and short-interest percentages, the next earnings date. These stay N/A with the reason. A reporting currency no source gives is assumed equal to the trading currency and labelled so.
 - **Bank of Canada Valet API (free, no key):** the Government of Canada 10-year benchmark bond yield for CAD-priced stocks. Cache it with the price TTL.
 - **Share-count history must be adjusted before any trend is computed:**
   - Adjust for splits and reverse splits using yfinance's split history, so a 1-for-10 reverse split is never read as a 90% buyback.

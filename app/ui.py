@@ -12,7 +12,7 @@ import streamlit as st
 
 from app.charts import ChartOut
 from app.stock_view import Tag
-from data.health import BANNER, HealthReport
+from data.health import BANNER, INFO_BLOCKED_BANNER, HealthReport
 
 _chart_ids = itertools.count()
 PAGES: dict[str, Any] = {}  # filled by app/main.py: "screener" | "stock" | "accuracy" → st.Page
@@ -79,6 +79,10 @@ def steps_html(steps: list[str]) -> str:
 
 def banner(report: HealthReport) -> None:
     if report.ok:
+        return
+    if report.only_info_blocked:  # prices and statements work: a notice, not an error
+        st.warning("**" + INFO_BLOCKED_BANNER + "**\n\n" + "\n".join(f"- {f}" for f in report.failures)
+                   + f"\n\nChecked {report.checked_at:%Y-%m-%d %H:%M}.")
         return
     st.error("**" + BANNER + "**\n\n" + "\n".join(f"- {f}" for f in report.failures)
              + f"\n\nChecked {report.checked_at:%Y-%m-%d %H:%M}. Cached results are still shown, each with its age.")

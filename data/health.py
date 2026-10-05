@@ -20,6 +20,9 @@ from data.cache import DiskCache
 from data.provider import DataProvider, ProviderError
 
 BANNER = "Data source not responding correctly — try updating yfinance (python scripts/upgrade_yfinance.py)"
+INFO_BLOCKED_BANNER = ("Yahoo is refusing company-info requests from this server (common on cloud hosts); "
+                       "company info comes from saved copies or fallback sources, each labelled")
+INFO_FAILED = "info failed"
 CACHE_KEY = "health|canaries"
 
 
@@ -28,6 +31,17 @@ class HealthReport(BaseModel):
     failures: list[str] = Field(default_factory=list)
     checked_at: datetime
     tickers: list[str] = Field(default_factory=list)
+
+    @property
+    def info_blocked(self) -> bool:
+        """Every canary's `info` request failed: Yahoo is refusing `info` (prices and statements may
+        still work). Derived from the failures, so cached reports need no new field."""
+        return bool(self.tickers) and all(
+            any(f.startswith(f"{t}: {INFO_FAILED}") for f in self.failures) for t in self.tickers)
+
+    @property
+    def only_info_blocked(self) -> bool:
+        return self.info_blocked and all(f": {INFO_FAILED}" in f for f in self.failures)
 
 
 def _check_ticker(provider: DataProvider, ticker: str) -> list[str]:
@@ -41,7 +55,7 @@ def _check_ticker(provider: DataProvider, ticker: str) -> list[str]:
     try:
         info = provider.get_info(ticker)
     except ProviderError as exc:
-        return failures + [f"{ticker}: info failed ({exc})"]
+        return failures + [f"{ticker}: {INFO_FAILED} ({exc})"]
     if info.get("quote_type") not in (None, "EQUITY"):
         return failures  # ETF canary: prices and a basic info response are enough
     for fs in fm.fields_for("info"):

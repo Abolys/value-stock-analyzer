@@ -18,7 +18,7 @@ A single-user Streamlit app that screens for value stocks, runs a four-lens anal
 - `/.claude/commands` — one slash command per build phase (`/phase-1` … `/phase-6`)
 - `config.py` — every threshold and default (see Rule 1 and `docs/SPEC.md`). No numeric thresholds anywhere else.
 - `/tests` — pytest, with offline fixtures in `/tests/fixtures/`
-- `.env` — optional `ANTHROPIC_API_KEY` (without it the LLM lenses fall back to the Claude Code CLI; see Rule 4), `ANTHROPIC_MODEL`, `SEC_USER_AGENT`, optional `LLM_BACKEND` / `CLAUDE_CODE_CLI`, optional SMTP settings for alert emails (Phase 6). Never hard-code keys. A `.env.example` is provided in the kit.
+- `.env` — optional `ANTHROPIC_API_KEY` (without it the LLM lenses fall back to the Claude Code CLI; see Rule 4), `ANTHROPIC_MODEL`, `SEC_USER_AGENT`, optional `LLM_BACKEND` / `CLAUDE_CODE_CLI`, optional SMTP settings for alert emails (Phase 6), optional `FINNHUB_API_KEY` (free tier; used only by the info fallback when Yahoo refuses `info`, see "Data sources and their limits" in `docs/SPEC.md`). Never hard-code keys. A `.env.example` is provided in the kit.
 - `.gitignore` — provided in the kit; Phase 1 checks and extends it before the first commit. It covers `.env`, the disk cache, `runs.db` and any other SQLite files, `/data/universe/raw/`, `__pycache__/` and virtual-env folders. Never commit `.env`; if it is ever staged, stop and say so.
 
 ## How to work on this project

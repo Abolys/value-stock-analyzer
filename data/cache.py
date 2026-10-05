@@ -14,7 +14,7 @@ import sqlite3
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -23,7 +23,8 @@ import pandas as pd
 import config
 from data import cache_policy
 from data.provider import (
-    BatchPriceResult, DataProvider, PricePoint, ProviderError, closes_from_frame, range_from_frame,
+    BatchPriceResult, DataProvider, PricePoint, ProviderError, ProviderUnavailable, closes_from_frame,
+    range_from_frame,
 )
 
 SCHEMA = """
@@ -205,13 +206,46 @@ def _key(provider: str, method: str, ticker: str, *args: Any) -> str:
     return "|".join([provider, method, ticker, *[str(a) for a in args]])
 
 
-class CachedProvider(DataProvider):
-    """Wraps any DataProvider with the disk cache and the expiry rules."""
+class InfoBlock:
+    """Yahoo refusing `info` requests, remembered for INFO_BLOCK_MINUTES so later calls skip the live
+    request (and its back-off) and go straight to the cached copy or the fallback."""
 
-    def __init__(self, inner: DataProvider, cache: DiskCache | None = None):
+    def __init__(self, clock: Callable[[], datetime] = datetime.now):
+        self.clock = clock
+        self.until: datetime | None = None
+        self.reason = ""
+
+    def trip(self, reason: str) -> None:
+        self.until = self.clock() + timedelta(minutes=config.INFO_BLOCK_MINUTES)
+        self.reason = reason
+
+    def clear(self) -> None:
+        self.until, self.reason = None, ""
+
+    @property
+    def active(self) -> bool:
+        return self.until is not None and self.clock() < self.until
+
+
+class CachedProvider(DataProvider):
+    """Wraps any DataProvider with the disk cache and the expiry rules.
+
+    `info_fallback` (an object with `build(ticker, why) -> InfoResult`, see data/info_fallback.py)
+    rebuilds a ticker's info from other sources when Yahoo refuses `info` and no cached copy exists;
+    the rebuilt info is cached under the price rule (a day), so Yahoo is asked again tomorrow."""
+
+    def __init__(self, inner: DataProvider, cache: DiskCache | None = None, info_fallback: Any = None):
         self.inner = inner
         self.cache = cache or DiskCache()
         self.name = inner.name
+        self.info_fallback = info_fallback
+        self.info_block = InfoBlock(self.cache.clock)
+
+    def get_quote_profile(self, ticker: str) -> dict[str, Any]:
+        """Yahoo chart data for the info fallback (cached under the price rule)."""
+        if not hasattr(self.inner, "get_quote_profile"):
+            raise ProviderUnavailable(f"{self.inner.name} has no quote profile")
+        return self._cached("prices", "get_quote_profile", ticker)
 
     def _next_earnings(self, ticker: str) -> Callable[[], date | None]:
         def get() -> date | None:
@@ -238,12 +272,31 @@ class CachedProvider(DataProvider):
         holder: dict[str, Any] = {}
 
         def fetch():
-            holder["v"] = self.inner.get_info(ticker)
+            if self.info_fallback is not None and self.info_block.active:
+                raise ProviderError(f"Yahoo info skipped: {self.info_block.reason}")
+            try:
+                holder["v"] = self.inner.get_info(ticker)
+            except ProviderError as exc:
+                if self.info_fallback is not None:
+                    self.info_block.trip(f"refused for {ticker} at {self.cache.clock():%H:%M} ({exc})")
+                raise
             return holder["v"]
 
-        return self.cache.fetch(key, "info", fetch, ticker=ticker, method="get_info",
-                                next_earnings=lambda: holder["v"].next_earnings(self.cache.clock().date())
-                                if "v" in holder else None)
+        try:
+            # A fresh cached copy, else live; on failure an expired copy is served with its age.
+            return self.cache.fetch(key, "info", fetch, ticker=ticker, method="get_info",
+                                    next_earnings=lambda: holder["v"].next_earnings(self.cache.clock().date())
+                                    if "v" in holder else None)
+        except ProviderError as exc:
+            if self.info_fallback is None:
+                raise
+            why = str(exc)
+        try:
+            return self.cache.fetch(_key(self.inner.name, "fallback_info", ticker), "prices",
+                                    lambda: self.info_fallback.build(ticker, why), ticker=ticker,
+                                    method="fallback_info")
+        except ProviderError as fallback_exc:
+            raise ProviderError(f"{why}; fallback: {fallback_exc}") from fallback_exc
 
     def get_statement(self, ticker, kind, freq):
         return self._cached("fundamentals", "get_statement", ticker, kind, freq)

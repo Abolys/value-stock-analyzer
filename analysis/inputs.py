@@ -19,6 +19,7 @@ from data.edgar import EdgarClient
 from analysis.models import FundamentalSeries, SeriesPoint
 from data import field_map as fm
 from data.fundamentals import Fundamentals
+from data.info_fallback import fallback_reason
 from data.insiders import collect_insider_data
 from data.xbrl import CompanyFacts
 from data.leadership import FilingDoc, LeadershipResult, LLMConfirmation, leadership_flag
@@ -121,7 +122,7 @@ def load_inputs(ctx: ScreenContext, ticker: str, edgar: EdgarClient | None = Non
     screen, f, info = screen_ticker_full(ctx, ticker, sources=MANUAL_SOURCE, force_stage2=True)
     if screen.status == STATUS_FAILED_TO_LOAD or f is None or info is None:
         raise AnalysisLoadError(screen.load_error or "statements not loaded")
-    notes: list[str] = []
+    notes: list[str] = [fallback_reason(info)] if info.is_fallback else []
     try:
         divs = ctx.provider.get_dividends(ticker)
     except ProviderError as exc:
