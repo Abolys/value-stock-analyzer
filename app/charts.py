@@ -315,6 +315,11 @@ def peer_strip(me: ScreenResult, peers: list[ScreenResult], source_note: str = "
                                x=0, y=1, showarrow=False, xanchor="left", yanchor="top",
                                font=dict(color=theme.MUTED, size=11), row=row, col=1)
         else:
+            # The value label renders above the dot. The row's y range below parks the dot low, so the
+            # label always sits inside the row instead of clipping against the row boundary (or the
+            # figure top on the first row, where there is no headroom above the row at all). Centered
+            # on the dot it also never covers the marker, and at an x-axis edge the label overhangs
+            # into the (wide enough) side margin instead of running off the figure.
             fig.add_trace(go.Scatter(x=[v * (100 if unit == "pts" else 1)], y=[0], mode="markers+text",
                                      name=me.ticker, text=[_fmt_metric(v, unit)], textposition="top center",
                                      marker=dict(size=15, color=theme.ticker_color(me.ticker),
@@ -328,10 +333,15 @@ def peer_strip(me: ScreenResult, peers: list[ScreenResult], source_note: str = "
             fig.add_trace(go.Scatter(x=[], y=[], mode="markers", visible="legendonly", showlegend=False,
                                      name=f"{label} (no data)"), row=row, col=1)
             fig.update_xaxes(visible=False, row=row, col=1)
-        fig.update_yaxes(visible=False, range=[-1, 1.2], row=row, col=1)
+        # The dots share y=0; the range only sets where that line sits in the row. Keep the top open
+        # (well over the ~19px the value label above the dot needs) so the label is never clipped by
+        # the row boundary, and leave just enough below that the dot clears the x axis.
+        fig.update_yaxes(visible=False, range=[-0.6, 1.7], row=row, col=1)
         if unit == "%":
             fig.update_xaxes(tickformat=".0%", row=row, col=1)
-    _base(fig, 330, showlegend=False)
+    # Wider side margins than the default: the value label of a dot at the axis edge overhangs into
+    # them, and must not run off the figure on narrow containers.
+    _base(fig, 330, showlegend=False, margin=dict(l=20, r=20, t=30, b=10))
     # The missing-metric notes were already anchored in place above; these are the four subplot
     # titles (make_subplots appends them to layout.annotations first) — left-aligned like the
     # other charts.

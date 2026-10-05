@@ -309,6 +309,39 @@ def test_peer_strip_keeps_rows_without_any_dots_from_collapsing():
     assert [a.xref for a in notes] == ["x2 domain", "x3 domain", "x4 domain"]  # each note on its own row
 
 
+def test_peer_strip_value_label_keeps_headroom_inside_its_row():
+    """The highlighted ticker's value label renders above its dot. With the dot near the top of the
+    row the label clips against the row boundary — against the figure top on the first row, where
+    there is no headroom above the row at all — making the number unreadable. Parking the dot low in
+    the row's domain leaves the label open space inside the row instead."""
+    me = run_eval()
+    me.ticker = "ZD"
+    peer = run_eval(px=8.0)
+    peer.ticker = "PEER1"
+    out = charts.peer_strip(me, [peer])
+    for attr in ("yaxis", "yaxis2", "yaxis3", "yaxis4"):
+        lo, hi = getattr(out.fig.layout, attr).range
+        assert lo < 0 < hi
+        assert hi / (hi - lo) >= 0.6  # most of each row is open space above the dot line
+
+
+def test_peer_strip_value_label_stays_centered_on_the_dot():
+    """The value label stays centered above the highlighted dot on every row — including a dot at
+    the very end of an axis, where it overhangs into the side margin (wider than the default for
+    this reason). An inward-anchored label there would print onto the marker."""
+    def positions(me_px, peer_px):
+        me, peer = run_eval(px=me_px), run_eval(px=peer_px)
+        me.ticker, me.name = "ZD", "Zimmer"
+        peer.ticker, peer.name = "PEER1", "Peer One"
+        out = charts.peer_strip(me, [peer])
+        assert all(t.textposition == "top center" for t in out.fig.data if t.name == "ZD")
+        # the label of an end-of-axis dot overhangs into the side margin
+        assert out.fig.layout.margin.l >= 20 and out.fig.layout.margin.r >= 20
+
+    positions(10.0, 40.0)  # ZD is the rightmost dot on the margin-of-safety row
+    positions(40.0, 10.0)  # ...or the leftmost
+
+
 def test_drawdown_history_indexes_both_to_100_on_one_axis():
     idx = pd.bdate_range("2024-01-01", periods=400)
     closes = pd.Series([50.0 + (i % 50) for i in range(400)], index=idx)
