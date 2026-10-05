@@ -3,13 +3,19 @@
 .env.*
 !.env.example
 
-# Local data, caches and databases
+# Local data, caches and databases.
+# Baseline for the deploy: storage/runs.db and the live caches are committed so
+# every Streamlit Cloud deploy starts with the latest screens, portfolio and
+# warm caches (data flows local -> Cloud; the Cloud app can read but not push).
+# Trade-off: binary blobs grow the repo history.
 *.db
+!storage/runs.db
 *.sqlite
 *.sqlite3
-cache/
 .cache/
-data/cache/
+data/cache/*
+!data/cache/cache.db
+!data/cache/llm_cache.db
 data/universe/raw/
 data/universe/refresh_status.json
 
@@ -29,7 +35,7 @@ Thumbs.db
 # Project archives
 *.zip
 
-# SQLite side files (runs.db and the disk cache are covered by *.db / data/cache/)
+# SQLite side files for the committed databases (journal/WAL/SHM never committed)
 *.db-journal
 *.db-wal
 *.db-shm
