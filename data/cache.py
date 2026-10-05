@@ -8,6 +8,7 @@ stale with its age — cached data stays usable during an outage.
 
 from __future__ import annotations
 
+import os
 import pickle
 import sqlite3
 import threading
@@ -75,15 +76,49 @@ class DiskCache:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.clock = clock
         self._lock = threading.Lock()
-        self._conn = sqlite3.connect(self.path, check_same_thread=False)
-        self._conn.execute(SCHEMA)
-        self._conn.commit()
+        self._conn: sqlite3.Connection | None = None
+        self._file_id: tuple[int, int] | None = None
+        self._open()
         # Recent events only (the app's provider lives as long as the server); running totals for
         # the screen summary are kept separately so trimming the log never changes them.
         self.events: deque[CacheEvent] = deque(maxlen=config.CACHE_EVENT_LOG_MAX)
         self.event_count = 0  # every event ever recorded; a caller's mark for events_since()
         self.reported_tickers: set[str] = set()  # fundamentals refetched because the company reported
         self.info_hit_tickers: set[str] = set()  # info served from cache
+
+    def _open(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+        self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        self._conn.execute(SCHEMA)
+        self._conn.commit()
+        self._file_id = self._current_file_id()
+
+    def _current_file_id(self) -> tuple[int, int] | None:
+        try:
+            st = os.stat(self.path)
+        except OSError:
+            return None
+        return st.st_dev, st.st_ino
+
+    def _db(self) -> sqlite3.Connection:
+        """The connection, reopened if the file was replaced or removed under it (a deploy seeding a new
+        baseline, see storage/baseline.py); SQLite refuses to write through a connection to a moved file.
+        Call with the lock held."""
+        if self._current_file_id() != self._file_id:
+            self._open()
+        return self._conn
+
+    def _write(self, sql: str, params: tuple) -> None:
+        """Execute and commit; on an OperationalError reopen the connection and retry once. Lock held."""
+        try:
+            conn = self._db()
+            conn.execute(sql, params)
+            conn.commit()
+        except sqlite3.OperationalError:
+            self._open()
+            self._conn.execute(sql, params)
+            self._conn.commit()
 
     def record(self, ev: CacheEvent) -> None:
         self.events.append(ev)
@@ -101,7 +136,7 @@ class DiskCache:
 
     def get(self, key: str) -> CacheEntry | None:
         with self._lock:
-            row = self._conn.execute(
+            row = self._db().execute(
                 "SELECT key, kind, payload, fetched_at, expires_at, expiry_reason, provider FROM cache WHERE key=?",
                 (key,)).fetchone()
         if row is None:
@@ -114,11 +149,10 @@ class DiskCache:
             fetched_at: datetime | None = None) -> CacheEntry:
         fetched_at = fetched_at or self.clock()
         with self._lock:
-            self._conn.execute(
+            self._write(
                 "INSERT OR REPLACE INTO cache VALUES (?,?,?,?,?,?,?,?,?)",
                 (key, kind, ticker, method, pickle.dumps(payload), fetched_at.isoformat(),
                  expires_at.isoformat(), reason, provider))
-            self._conn.commit()
         return CacheEntry(key, kind, payload, fetched_at, expires_at, reason, provider)
 
     def fetch(self, key: str, kind: cache_policy.CacheKind, fetch_fn: Callable[[], Any], *,

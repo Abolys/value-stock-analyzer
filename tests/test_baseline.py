@@ -71,3 +71,22 @@ def test_replace_keeps_content(tmp_path):
     f.write_bytes(b"data")
     _replace_with_writable_copy(f)
     assert f.read_bytes() == b"data" and not (tmp_path / "x.db.tmp").exists()
+
+
+def test_disk_cache_survives_its_file_being_replaced(tmp_path):
+    """A deploy swaps in a new baseline under a running app: the cached connection must reopen."""
+    from datetime import datetime, timedelta
+
+    import shutil
+
+    from data.cache import DiskCache
+
+    path = tmp_path / "cache.db"
+    cache = DiskCache(path)
+    later = datetime.now() + timedelta(days=1)
+    cache.put("a", "health", 1, later, "r")
+    snapshot = tmp_path / "snapshot.db"
+    shutil.copyfile(path, snapshot)
+    os.replace(snapshot, path)  # what bootstrap_baseline does with a new baseline
+    cache.put("b", "health", 2, later, "r")  # would raise "readonly database" through the old connection
+    assert cache.get("a").payload == 1 and cache.get("b").payload == 2
