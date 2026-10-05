@@ -26,6 +26,9 @@ reports/output/
 .DS_Store
 Thumbs.db
 
+# Project archives
+*.zip
+
 # SQLite side files (runs.db and the disk cache are covered by *.db / data/cache/)
 *.db-journal
 *.db-wal
