@@ -76,6 +76,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `LEADERSHIP_KEYWORD_WINDOW_WORDS` / `LEADERSHIP_NEAR_ROLE_WORDS` | 12 / 2 | 6-K pre-filter: a departure keyword must fall within 12 words of a CEO/CFO title ("interim" within 2), so quarterly reports that merely mention the CEO, "interim" statements and "retirement" benefits don't reach the LLM |
 | `QUARTER_GAP_DAYS` | 80–100 | Consecutive quarters for the TTM sum must be this far apart; otherwise the latest fiscal year is used ("annual, not TTM") |
 | `HEALTH_CHECK_TTL_MINUTES` | 60 | A health-check result is reused this long at app start |
+| `HEALTH_CHECK_RETRIES` | 0 | Retries per yfinance call in the health check: a probe fails fast and shows the banner instead of blocking the page through the back-off |
 | `RISK_FREE_QUOTE_RANGE` | 0–20 | Sanity range for a quoted 10-year yield in percent (`^TNX` is quoted in percent, verified 2026-09) |
 | `GRAHAM_MULTIPLIER` | 22.5 | Graham Number = √(22.5 × EPS × book value per share) |
 | `STAGE1_SLACK` (how it applies) | hurdle × (1 − 0.25), ceiling × (1 + 0.25) | Stage 1 loosens what each metric is compared against: Graham ≥ price × (1 + `MIN_MARGIN_OF_SAFETY`) × 0.75; FCF yield ≥ (10-year + spread) × 0.75; net debt/EBITDA ≤ 3.0 × 1.25; negative info FCF → estimated runway ≥ 24 × 0.75 months |

@@ -398,6 +398,7 @@ BATCH_PRICE_CHUNK_SIZE = 100
 PRICE_HISTORY_PERIOD = "10y"
 EDGAR_MAX_REQUESTS_PER_SECOND = 10
 HEALTH_CHECK_TTL_MINUTES = 60
+HEALTH_CHECK_RETRIES = 0  # the probe fails fast (banner) instead of blocking the page through the back-off
 SCREEN_PROGRESS_POLL_SECONDS = 5  # the Screener page re-reads run progress this often
 SCREEN_STALL_WARN_MINUTES = 10  # warn on the Screener when an active run has screened no ticker this long
 # On app start, ask to run a new screen when the last completed one started more than this many

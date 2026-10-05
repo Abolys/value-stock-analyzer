@@ -42,8 +42,13 @@ def valet_fetch():
 
 
 def health(provider: CachedProvider) -> HealthReport:
-    # The check hits the live source behind the cache, never the cache itself.
-    return cached_health_check(provider.inner, provider.cache)
+    # The check hits the live source behind the cache, never the cache itself. It runs before the
+    # first page renders, so the live probe never retries: a throttled Yahoo (common on shared cloud
+    # IPs) would otherwise hold the page through minutes of back-off; it shows the banner instead.
+    source = provider.inner
+    if isinstance(source, YFinanceProvider):
+        source = YFinanceProvider(retries=config.HEALTH_CHECK_RETRIES)
+    return cached_health_check(source, provider.cache)
 
 
 def build_edgar(provider: CachedProvider) -> EdgarClient:

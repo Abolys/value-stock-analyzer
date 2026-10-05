@@ -161,3 +161,23 @@ def test_every_value_records_its_provider(fx_provider):
 def test_fixture_provider_unknown_ticker_is_provider_error():
     with pytest.raises(ProviderError):
         fixture_provider().get_info("NOPE")
+
+
+def test_health_probe_does_not_retry():
+    """The app-start health check fails fast instead of sleeping through the back-off."""
+    import config
+    from data.provider import ProviderError
+    from data.throttle import MinIntervalThrottle
+    from data.yfinance_provider import YFinanceProvider
+
+    calls, sleeps = [], []
+
+    def broken(ticker):
+        calls.append(ticker)
+        raise RuntimeError("throttled")
+
+    prov = YFinanceProvider(ticker_factory=broken, throttle=MinIntervalThrottle(0), sleep=sleeps.append,
+                            retries=config.HEALTH_CHECK_RETRIES)
+    with pytest.raises(ProviderError):
+        prov.get_statement("MSFT", "income", "quarterly")
+    assert len(calls) == 1 and sleeps == []

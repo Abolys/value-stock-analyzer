@@ -41,11 +41,14 @@ class YFinanceProvider(DataProvider):
 
     def __init__(self, ticker_factory: Callable[[str], Any] | None = None,
                  download_fn: Callable[..., pd.DataFrame] | None = None,
-                 throttle=YF_THROTTLE, sleep=None, today: Callable[[], date] = date.today):
+                 throttle=YF_THROTTLE, sleep=None, today: Callable[[], date] = date.today,
+                 retries: int | None = None):
         self._ticker_factory = ticker_factory or (lambda t: _yf().Ticker(t))
         self._download = download_fn or (lambda *a, **k: _yf().download(*a, **k))
         self._throttle = throttle
-        self._retry_kw = {"sleep": sleep} if sleep else {}
+        self._retry_kw: dict[str, Any] = {"sleep": sleep} if sleep else {}
+        if retries is not None:
+            self._retry_kw["retries"] = retries
         self._today = today
 
     # -- helpers ---------------------------------------------------------
