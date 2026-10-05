@@ -24,6 +24,12 @@ from data.values import is_missing
 PROVIDER = "yfinance"
 
 
+class _EmptyInfo(Exception):
+    """Yahoo answered but returned no usable info payload: the classic throttling symptom.
+    Retried with back-off like a hard failure (spec: "retry with back-off when yfinance
+    refuses or throttles requests")."""
+
+
 def _yf():
     import yfinance as yf  # imported lazily so offline tests never need network setup
 
@@ -58,9 +64,19 @@ class YFinanceProvider(DataProvider):
 
     # -- DataProvider ----------------------------------------------------
     def get_info(self, ticker: str) -> InfoResult:
-        raw = self._call(lambda: self._t(ticker).info) or {}
-        if not raw or not any(k in raw for k in ("quoteType", "currency", "symbol")):
-            raise ProviderError(f"yfinance returned no info for {ticker}")
+        def fetch():
+            raw = self._call(lambda: self._t(ticker).info) or {}
+            if not raw or not any(k in raw for k in ("quoteType", "currency", "symbol")):
+                raise _EmptyInfo(f"yfinance returned no info for {ticker}")
+            return raw
+
+        try:
+            # Only _EmptyInfo is retried here: hard failures were already retried and
+            # wrapped inside _call, and waiting again on top of that would stack the
+            # back-off delays.
+            raw = with_retries(fetch, retry_on=(_EmptyInfo,), **self._retry_kw)
+        except _EmptyInfo as exc:
+            raise ProviderError(str(exc)) from exc
         values, statuses = {}, {}
         for fs in fm.fields_for("info"):
             v, st = fm.resolve_info(raw, fs.canonical)

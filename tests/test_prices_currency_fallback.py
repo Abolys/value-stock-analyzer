@@ -64,6 +64,40 @@ def test_retry_with_backoff_then_failure():
     assert sleeps == [config.FETCH_BACKOFF_SECONDS * 2 ** i for i in range(config.FETCH_MAX_RETRIES)]
 
 
+def test_empty_info_is_retried_with_backoff_then_succeeds():
+    """Yahoo throttling usually shows up as an empty payload, not an exception."""
+    sleeps, attempts = [], []
+    good = {"quoteType": "EQUITY", "currency": "USD", "symbol": "X"}
+
+    class ThrottledThenFine:
+        @property
+        def info(self):
+            attempts.append(1)
+            return {} if len(attempts) <= config.FETCH_MAX_RETRIES - 1 else good
+
+    p = YFinanceProvider(ticker_factory=lambda t: ThrottledThenFine(), throttle=_NoThrottle(), sleep=sleeps.append)
+    info = p.get_info("X")
+    assert len(attempts) == config.FETCH_MAX_RETRIES  # failed FETCH_MAX_RETRIES - 1 times, then ok
+    assert sleeps == [config.FETCH_BACKOFF_SECONDS * 2 ** i for i in range(config.FETCH_MAX_RETRIES - 1)]
+    assert info.provider == "yfinance"
+
+
+def test_persistently_empty_info_fails_after_retries():
+    sleeps, attempts = [], []
+
+    class AlwaysEmpty:
+        @property
+        def info(self):
+            attempts.append(1)
+            return {}
+
+    p = YFinanceProvider(ticker_factory=lambda t: AlwaysEmpty(), throttle=_NoThrottle(), sleep=sleeps.append)
+    with pytest.raises(ProviderError, match="yfinance returned no info for X"):
+        p.get_info("X")
+    assert len(attempts) == config.FETCH_MAX_RETRIES + 1
+    assert sleeps == [config.FETCH_BACKOFF_SECONDS * 2 ** i for i in range(config.FETCH_MAX_RETRIES)]
+
+
 # ---------------------------------------------------------------- price accessors
 def test_adjusted_and_actual_prices_differ_on_dividend_payer(fx_provider):
     assert len(fx_provider.get_dividends("JPM")) > 0

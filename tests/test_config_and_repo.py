@@ -73,8 +73,13 @@ def test_gitignore_excludes_env():
     assert ".env" in lines
     r = subprocess.run(["git", "check-ignore", "-q", ".env"], cwd=ROOT)
     assert r.returncode == 0, ".env is not ignored by git"
-    for path in ["runs.db", "storage/runs.db", "data/cache/cache.db", "data/universe/raw/cowz.csv"]:
+    # Still ignored: raw universe data and the fixture cache.
+    for path in ["data/universe/raw/cowz.csv", "data/cache/fixtures_cache.db"]:
         assert subprocess.run(["git", "check-ignore", "-q", path], cwd=ROOT).returncode == 0, path
+    # Deliberately committed as the deploy baseline (see .gitignore): the app DB
+    # and the live caches are tracked so every Cloud deploy starts with them.
+    for path in ["storage/runs.db", "data/cache/cache.db", "data/cache/llm_cache.db"]:
+        assert subprocess.run(["git", "check-ignore", "-q", path], cwd=ROOT).returncode != 0, path
     assert subprocess.run(["git", "check-ignore", "-q", ".env.example"], cwd=ROOT).returncode != 0
 
 
