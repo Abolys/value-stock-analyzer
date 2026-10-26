@@ -72,7 +72,7 @@ Every constant below lives in `config.py` (Rule 1 in CLAUDE.md). Further constan
 | `BATCH_PRICE_CHUNK_SIZE` | 100 | Tickers per yfinance multi-ticker download in the batch price step |
 | `CORP_ACTION_SHARE_WINDOW_DAYS` | 120 | How close to a price gap the share-count change must fall for the corporate-action heuristic (also the window for matching a split to a share jump) |
 | `SPLIT_MATCH_TOLERANCE` | 0.15 | A share-count jump within ±15% of a recorded split ratio is treated as that split |
-| `LEADERSHIP_ROLE_TERMS` / `DEPARTURE_TERMS` | CEO/CFO titles; resign, retire, step down, … | 8-K Item 5.02 parsing: a departure needs a role term and a departure term in the same sentence (divisional titles such as "CEO of CCB" don't count) |
+| `LEADERSHIP_ROLE_TERMS` / `DEPARTURE_TERMS` | CEO/CFO titles; resign, retire, step down, … (patterns; "retirement" only as "retirement as/from") | 8-K Item 5.02 parsing: a departure needs a role term and a departure term in the same sentence (divisional titles such as "CEO of CCB" don't count, nor pay and pension wording such as "retirement vesting treatment") |
 | `LEADERSHIP_KEYWORD_WINDOW_WORDS` / `LEADERSHIP_NEAR_ROLE_WORDS` | 12 / 2 | 6-K pre-filter: a departure keyword must fall within 12 words of a CEO/CFO title ("interim" within 2), so quarterly reports that merely mention the CEO, "interim" statements and "retirement" benefits don't reach the LLM |
 | `QUARTER_GAP_DAYS` | 80–100 | Consecutive quarters for the TTM sum must be this far apart; otherwise the latest fiscal year is used ("annual, not TTM") |
 | `HEALTH_CHECK_TTL_MINUTES` | 60 | A health-check result is reused this long at app start |

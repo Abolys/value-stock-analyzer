@@ -364,12 +364,15 @@ LEADERSHIP_NEAR_ROLE_WORDS = 2
 
 # 8-K Item 5.02 sentence-level matching: a departure needs a role term AND a
 # departure term in the same sentence (the Item caption itself is stripped).
+# Departure terms are regex patterns matched at the start of a word, like LEADERSHIP_KEYWORDS.
+# "retirement" counts only as "retirement as/from …": elsewhere in Item 5.02 it is pay and pension
+# wording ("retirement vesting treatment", "the French retirement system"), not a departure.
 LEADERSHIP_ROLE_TERMS = {
     "CEO": ["chief executive officer", "ceo"],
     "CFO": ["chief financial officer", "cfo"],
 }
 DEPARTURE_TERMS = [
-    "resign", "retire", "step down", "steps down", "stepping down", "stepped down",
+    "resign", "retire(?!ment)", r"retirement\s+(?:as|from)\b", "step down", "steps down", "stepping down", "stepped down",
     "will depart", "departure of", "terminated", "termination of", "will leave",
     "separation from", "no longer serve", "cease to serve", "ceased to serve",
 ]

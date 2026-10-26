@@ -116,9 +116,14 @@ PERSON_HONORIFIC = re.compile(r"\b(?:Mr|Ms|Mrs|Dr)\.?\s+((?:[A-Z][\w'\-]+\.?\s+)
 # Dots after honorifics and middle initials would split a name across sentences.
 HONORIFIC_DOT = re.compile(r"\b(Mr|Ms|Mrs|Dr|[A-Z])\.(?=\s+[A-Z])")
 COMPANY_WORDS = ("the company", "the firm", "the corporation", "the registrant", "the bank", "the issuer")
+# The name may be followed by an appositive: ", <title>," or, when a filing drops the closing comma,
+# ", the <title>" (only one that starts with "the", so "Lucid Group, Inc. (…) announced" is no person).
 PERSON_BEFORE_VERB = re.compile(
-    r"\b([A-Z][a-z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z'\-]+){1,2})(?:,\s[^,]{1,80},)?\s+(?:has\s+)?"
-    r"(?:notified|informed|announced|resigned|will resign|retired|will retire|will step down|stepped down|decided)")
+    r"\b([A-Z][a-z'\-]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z'\-]+){1,2})(?:,\s[^,]{1,80},|,\sthe\s[^,]{1,76}?)?\s+(?:has\s+)?"
+    r"(?:notified|informed|announced|resigned|will resign|retired|will retire|will step down|stepped down|decided|"
+    r"will leave|will depart)")
+# A possessive is not part of a name ("Mr. Boussaid's personal cost" → "Boussaid").
+POSSESSIVE = re.compile(r"['’]s?$")
 
 
 def _item_502_section(text: str) -> str:
@@ -132,7 +137,8 @@ def _item_502_section(text: str) -> str:
 
 
 def _has_term(sentence_lower: str, term: str) -> bool:
-    return re.search(rf"(?<![a-z]){re.escape(term)}", sentence_lower) is not None
+    """`term` is a pattern (config.DEPARTURE_TERMS), matched at the start of a word."""
+    return re.search(rf"(?<![a-z]){term}", sentence_lower) is not None
 
 
 def _company_level(after: str, company_name: str | None) -> bool:
@@ -166,7 +172,7 @@ def _roles_in(sentence_lower: str, company_name: str | None = None) -> list[str]
 
 def _person_in(sentence: str) -> str | None:
     m = PERSON_HONORIFIC.search(sentence) or PERSON_BEFORE_VERB.search(sentence)
-    return " ".join(m.group(1).split()) if m else None
+    return POSSESSIVE.sub("", " ".join(m.group(1).split())) if m else None
 
 
 def parse_8k_item_502(doc: FilingDoc, ticker: str, company_name: str | None = None) -> list[LeadershipEvent]:

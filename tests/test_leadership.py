@@ -3,7 +3,7 @@ from datetime import date
 from tests.conftest import HANDMADE
 
 from data import leadership as ld
-from data.fixture_provider import fixture_edgar
+from data.fixture_provider import captured_on, fixture_edgar
 from storage import db
 
 TODAY = date(2026, 9, 1)
@@ -42,6 +42,33 @@ def test_8k_divisional_ceo_on_real_jpm_fixture_not_counted(db_path):
                            manual_path=db_path.parent / "none.csv")
     assert r.flag == "none" and not r.partial_coverage  # "CEO of CCB" retiring is divisional
 
+
+
+def test_8k_real_fixture_lcid_pay_wording_is_not_a_departure(db_path):
+    # The 8-K of 2026-01-23 adjusts the CFO's pay for "the French retirement system": no departure.
+    # The 8-K of 2026-07-02 names the CFO before "will leave", with no comma after his title.
+    r = ld.leadership_flag("LCID", today=captured_on("LCID"), edgar=fixture_edgar(), db_path=db_path,
+                           manual_path=db_path.parent / "none.csv")
+    assert [(e.role, e.date, e.person) for e in r.events] == [
+        ("CFO", date(2026, 7, 2), "Taoufiq Boussaid"), ("CEO", date(2025, 2, 25), "Peter Rawlinson")]
+    assert r.departures == 2 and r.flag == "high"
+
+
+CAPTION = ("Item 5.02 Departure of Directors or Certain Officers; Election of Directors; Appointment of Certain "
+           "Officers; Compensatory Arrangements of Certain Officers. ")
+
+
+def item_502(body):
+    return ld.FilingDoc(form="8-K", filing_date=date(2026, 3, 4), accession="0000000001-26-000002",
+                        text=CAPTION + body + " Item 9.01 Financial Statements and Exhibits.")
+
+
+def test_retirement_counts_only_as_retirement_as_or_from():
+    pay = item_502("The Committee approved retirement vesting treatment for the Chief Executive Officer's awards.")
+    assert ld.parse_8k_item_502(pay, "SYN") == []
+    events = ld.parse_8k_item_502(item_502("On March 1, 2026, the Company announced Mr. John Roe's retirement as "
+                                           "Chief Financial Officer, effective March 31, 2026."), "SYN")
+    assert [(e.role, e.person) for e in events] == [("CFO", "John Roe")]  # the possessive is not part of the name
 
 # ---------------------------------------------------------------- 6-K
 def test_6k_keyword_hit_confirmed_by_llm():
