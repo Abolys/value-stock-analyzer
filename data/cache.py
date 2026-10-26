@@ -158,11 +158,13 @@ class DiskCache:
 
     def fetch(self, key: str, kind: cache_policy.CacheKind, fetch_fn: Callable[[], Any], *,
               next_earnings: Callable[[], date | None] | None = None, ticker: str | None = None,
-              method: str | None = None) -> Any:
+              method: str | None = None,
+              kind_for: Callable[[Any], cache_policy.CacheKind] | None = None) -> Any:
         """Return a fresh cached value, or fetch, store and return a new one.
 
         On fetch failure with an existing (expired) entry, return the stale
         payload and record a "stale" event; with no entry, re-raise.
+        `kind_for` picks the expiry rule from the fetched value (default: `kind`).
         """
         now = self.clock()
         entry = self.get(key)
@@ -178,6 +180,8 @@ class DiskCache:
                                               entry.age(now), error=str(exc), ticker=ticker, method=method))
                 return entry.payload
             raise
+        if kind_for is not None:
+            kind = kind_for(payload)
         ne = next_earnings() if (next_earnings and kind != "prices") else None
         expires_at, reason = cache_policy.expiry(kind, now, ne)
         provider = getattr(payload, "provider", None)
@@ -299,7 +303,23 @@ class CachedProvider(DataProvider):
             raise ProviderError(f"{why}; fallback: {fallback_exc}") from fallback_exc
 
     def get_statement(self, ticker, kind, freq):
-        return self._cached("fundamentals", "get_statement", ticker, kind, freq)
+        """The fundamentals rule, except that an empty statement never replaces a saved one with values. yfinance hides
+        a failed request as an empty table (its hide_exceptions defaults to on), so an empty answer may be an outage:
+        the saved copy is then served, marked stale with its age, as when a fetch fails. An empty statement with
+        nothing saved is kept for a day only (the price rule), so Yahoo is asked again tomorrow."""
+        key = _key(self.inner.name, "get_statement", ticker, kind, freq)
+
+        def fetch():
+            st = self.inner.get_statement(ticker, kind, freq)
+            if st.empty:
+                saved = self.cache.get(key)
+                if saved is not None and not saved.payload.empty:
+                    raise ProviderError(f"{self.inner.name} returned an empty {freq} {kind} statement for {ticker}; "
+                                        "the saved copy is kept")
+            return st
+
+        return self.cache.fetch(key, "fundamentals", fetch, next_earnings=self._next_earnings(ticker), ticker=ticker,
+                                method="get_statement", kind_for=lambda st: "prices" if st.empty else "fundamentals")
 
     def get_price_frame(self, ticker):
         """One cached download per ticker per CACHE_TTL_PRICES_DAYS serves both kinds of close and the

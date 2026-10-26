@@ -199,6 +199,7 @@ yfinance is unofficial: it reads Yahoo's website data and breaks when Yahoo chan
   - On failure the screen does not start. The run is recorded as "blocked: health check failed" with the specific failures.
   - The app shows a banner: "Data source not responding correctly — try updating yfinance", listing what failed.
   - Cached data stays usable during an outage, shown with its age.
+  - yfinance hides a failed statement request as an empty table, so an empty statement never replaces a saved one with values: the saved copy is served, marked stale with its age. An empty statement with nothing saved is kept for a day only (`CACHE_TTL_PRICES_DAYS`), so it is asked for again the next day.
 - **Circuit breaker.** During a run, if more than `CIRCUIT_BREAKER_FAIL_RATE` of the last `CIRCUIT_BREAKER_WINDOW` tickers failed to load, the run pauses and is marked "stopped: source failing". It can continue later with `--resume`.
 - **Field N/A report.** After each run, count N/A per field. A field that is N/A for more than `FIELD_NA_SPIKE` of tickers is flagged "likely renamed upstream" in the run summary and the UI.
 - **Pinned version.** `requirements.txt` pins the exact yfinance version. Upgrading is deliberate: `scripts/upgrade_yfinance.py` upgrades it, reruns the health check and `pytest`, and prints a pass/fail summary. The pin is updated only if both pass.

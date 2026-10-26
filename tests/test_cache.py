@@ -208,3 +208,42 @@ def test_event_log_is_bounded_but_run_totals_survive_trimming(cache, monkeypatch
     assert c.refetched_because_reported() == 1 and c.info_hit_tickers == {"B"}  # totals kept
     assert [e.key for e in c.events_since(mark)] == ["x2", "x3", "x4"]  # as far as the log holds them
     assert c.events_since(c.event_count) == []
+
+
+class EmptyWhenTold(CountingProvider):
+    """yfinance hides a failed statement request as an empty table: `empty` makes this provider answer like that."""
+
+    def __init__(self):
+        super().__init__(next_earnings=None)
+        self.empty = False
+
+    def get_statement(self, ticker, kind, freq):
+        st = super().get_statement(ticker, kind, freq)
+        return Statement(ticker=ticker, kind=kind, freq=freq, provider=self.name) if self.empty else st
+
+
+def test_an_empty_statement_never_replaces_a_saved_one(cache, clock):
+    p = EmptyWhenTold()
+    cp = CachedProvider(p, cache)
+    good = cp.get_statement("X", "income", "annual")
+    clock.now += timedelta(days=config.CACHE_TTL_FUNDAMENTALS_MAX_DAYS + 1)
+    p.empty = True  # an outage, seen through yfinance
+    assert cp.get_statement("X", "income", "annual").values == good.values
+    assert cache.events[-1].outcome == "stale" and "saved copy is kept" in cache.events[-1].error
+    p.empty = False  # Yahoo is back: the expired copy is refetched at once, not kept for months
+    clock.now += timedelta(days=1)
+    assert cp.get_statement("X", "income", "annual").values == good.values
+    assert cache.events[-1].outcome == "refetch"
+
+
+def test_an_empty_statement_with_nothing_saved_is_kept_a_day(cache, clock):
+    p = EmptyWhenTold()
+    p.empty = True
+    cp = CachedProvider(p, cache)
+    assert cp.get_statement("X", "income", "annual").empty
+    entry = cache.get(cp.key_for("get_statement", "X", "income", "annual"))
+    assert entry.expires_at - entry.fetched_at == timedelta(days=config.CACHE_TTL_PRICES_DAYS)
+    p.empty = False
+    clock.now += timedelta(days=config.CACHE_TTL_PRICES_DAYS, seconds=1)
+    assert not cp.get_statement("X", "income", "annual").empty
+
