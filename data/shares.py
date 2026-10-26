@@ -79,11 +79,15 @@ def _split_label(ratio: float) -> str:
     return f"{ratio:g}-for-1" if ratio >= 1 else f"1-for-{1 / ratio:g} reverse"
 
 
-def _split_explains(prev_d, cur_d, change_ratio: float, splits: pd.Series | None) -> bool:
+def _explaining_split(prev_d, cur_d, change_ratio: float, splits: pd.Series | None) -> tuple[pd.Timestamp, float] | None:
+    """The recorded split between two points whose ratio explains the change between them, if any."""
     if splits is None or len(splits) == 0:
-        return False
+        return None
     within = splits[(splits.index > prev_d) & (splits.index <= cur_d)]
-    return any(abs(change_ratio / r - 1) <= config.SPLIT_MATCH_TOLERANCE for r in within if r > 0)
+    for d, r in within.items():
+        if r > 0 and abs(change_ratio / r - 1) <= config.SPLIT_MATCH_TOLERANCE:
+            return d, float(r)
+    return None
 
 
 def share_trend(raw: pd.Series | None, splits: pd.Series | None, breaks: list[date],
@@ -111,8 +115,18 @@ def share_trend(raw: pd.Series | None, splits: pd.Series | None, breaks: list[da
     result.span_start, result.span_end = series.index[0].date(), series.index[-1].date()
     for (d0, v0), (d1, v1) in zip(series.items(), list(series.items())[1:]):
         change = v1 / v0
-        if abs(change - 1) > config.CORP_ACTION_SHARE_CHANGE and not _split_explains(d0, d1, change, splits):
+        if abs(change - 1) <= config.CORP_ACTION_SHARE_CHANGE:
+            continue
+        split = _explaining_split(d0, d1, change, splits)
+        if split is None:
             result.flags.append(f"unexplained share-count jump {change - 1:+.0%} between {d0.date()} and {d1.date()}")
+            continue
+        # The split fell in a gap of the data, so adjust_for_splits had nothing around it to compare;
+        # the jump shows the series is unadjusted there: restate the earlier points the same way.
+        split_date, ratio = split
+        series = series.where(series.index >= split_date, series * ratio)
+        result.notes.append(f"adjusted for {_split_label(ratio)} split on {split_date.date()} "
+                            f"(found at the jump between {d0.date()} and {d1.date()})")
     years = (series.index[-1] - series.index[0]).days / 365.25
     if years <= 0:
         result.status = f"{NA_INCOMPLETE} (zero-length span)"

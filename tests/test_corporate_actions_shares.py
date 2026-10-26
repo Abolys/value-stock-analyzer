@@ -94,3 +94,13 @@ def test_manual_csv_merge_keeps_manual_date():
     merged = ca.merge_breaks(h, m)
     assert [b.date for b in merged] == [date(2021, 7, 1), date(2024, 1, 5)]
     assert merged[0].sources == ["manual", "heuristic"]
+
+
+def test_split_in_a_data_gap_is_restated_not_read_as_dilution():
+    # The split falls in a gap wider than the matching window, so it can't be matched at its date;
+    # the jump it explains shows the series is unadjusted there, and it is restated like any other split.
+    raw = pd.Series([100.0, 400.0], index=pd.to_datetime(["2024-06-30", "2025-06-30"]))
+    splits = pd.Series([4.0], index=pd.to_datetime(["2024-12-31"]))
+    t = shares.share_trend(raw, splits, breaks=[])
+    assert not t.flags and t.trend_per_year == pytest.approx(0.0, abs=1e-12)
+    assert t.notes[-1] == "adjusted for 4-for-1 split on 2024-12-31 (found at the jump between 2024-06-30 and 2025-06-30)"
