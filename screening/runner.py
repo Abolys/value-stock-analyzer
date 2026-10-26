@@ -40,7 +40,7 @@ class CircuitBreaker:
     def __init__(self, window: int | None = None, fail_rate: float | None = None):
         self.window = window or config.CIRCUIT_BREAKER_WINDOW
         self.fail_rate = config.CIRCUIT_BREAKER_FAIL_RATE if fail_rate is None else fail_rate
-        self.outcomes: deque[bool] = deque(maxlen=window)  # True = failed to load
+        self.outcomes: deque[bool] = deque(maxlen=self.window)  # True = failed to load
 
     def record(self, failed: bool) -> None:
         self.outcomes.append(failed)

@@ -15,7 +15,7 @@ from data.values import Datum
 from data.yfinance_provider import YFinanceProvider
 from screening.engine import ScreenContext, screen_ticker
 from screening.models import STATUS_FAILED_TO_LOAD, ScreenResult
-from screening.runner import LIKELY_RENAMED, field_na_report, run_screen
+from screening.runner import LIKELY_RENAMED, CircuitBreaker, field_na_report, run_screen
 from storage import screen_store as store
 from storage.db import get_officer_snapshots
 
@@ -130,6 +130,22 @@ def test_second_run_without_passed_earnings_makes_no_fundamentals_calls(tmp_path
     for method in ("get_info", "get_statement", "get_shares_history", "get_earnings_dates"):
         assert second.count(method) == 0, method
     assert run.served_from_cache == 2 and run.refetched_reported == 0
+
+
+def test_circuit_breaker_watches_a_rolling_window_of_the_last_tickers():
+    # The defaults (as the runner builds it): the last CIRCUIT_BREAKER_WINDOW tickers, not only the first ones.
+    b = CircuitBreaker()
+    w = config.CIRCUIT_BREAKER_WINDOW
+    for _ in range(w):
+        b.record(False)
+    for _ in range(w // 2):
+        b.record(True)
+    assert not b.tripped  # half of the last window failed: not more than half
+    b.record(True)
+    assert b.tripped  # more than half of the last window failed, after the first window had passed
+    for _ in range(w):
+        b.record(False)
+    assert not b.tripped  # old failures drop out of the window
 
 
 def test_circuit_breaker_trips_then_resume_completes(tmp_path, universe, monkeypatch):
