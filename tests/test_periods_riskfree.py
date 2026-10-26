@@ -83,6 +83,15 @@ def test_staleness_by_passed_earnings_date():
     assert not periods.staleness(date(2026, 6, 30), ed, date(2026, 9, 1)).stale
 
 
+def test_staleness_label_names_the_date_only_when_there_is_one():
+    s = periods.staleness(date(2026, 3, 31), EarningsDates(ticker="X"), date(2026, 9, 1))
+    assert s.label.startswith("fundamentals may be stale (as of 2026-03-31): latest period ended")
+    # No reported period (SPY, an ETF, has no statements): no "as of None" for the user to read.
+    s = periods.staleness(None, None, date(2026, 9, 1))
+    assert s.label == "fundamentals may be stale: no reported period found"
+    assert periods.staleness(date(2026, 6, 30), EarningsDates(ticker="X"), date(2026, 9, 1)).label == ""
+
+
 def test_mixed_periods_marking():
     debt = Datum(value=1.0, period_end=date(2026, 6, 30))
     ebitda = Datum(value=1.0, period_end=date(2025, 12, 31))

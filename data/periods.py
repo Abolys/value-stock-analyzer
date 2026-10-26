@@ -96,7 +96,8 @@ class Staleness(BaseModel):
     def label(self) -> str:
         if not self.stale:
             return ""
-        return f"fundamentals may be stale (as of {self.as_of}): " + "; ".join(self.reasons)
+        as_of = f" (as of {self.as_of})" if self.as_of is not None else ""
+        return f"fundamentals may be stale{as_of}: " + "; ".join(self.reasons)
 
 
 def staleness(latest_end: date | None, earnings: EarningsDates | None, today: date) -> Staleness:
