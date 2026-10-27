@@ -37,7 +37,7 @@ def _no_baseline_seed(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_llm_key(monkeypatch, request, tmp_path):
-    """Offline tests never see a real API key, the Claude Code CLI or the real LLM cache;
+    """Offline tests never see a real API key or the real LLM cache;
     LLM calls go through mocks."""
     import config
     from llm import departure
@@ -50,7 +50,7 @@ def _no_llm_key(monkeypatch, request, tmp_path):
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
     monkeypatch.setenv("FREE_LLM_API_KEY", "")
     monkeypatch.setattr(config, "FREE_LLM_API_KEY", "")
-    monkeypatch.setattr(config, "LLM_BACKEND", "api")  # never fall back to the real CLI offline
+    monkeypatch.setattr(config, "LLM_BACKEND", "api")
 
 
 @pytest.fixture(autouse=True)

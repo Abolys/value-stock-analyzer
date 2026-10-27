@@ -1,6 +1,6 @@
 """Sharing the app with a link: remote visitors must sign in; the viewer password is read-only
 (no edits, no screens or alert checks, nothing stored; LLM lenses run on the free tier only -
-never the owner's API key or Claude subscription); feedback reaches the owner."""
+never the owner's API key); feedback reaches the owner."""
 
 import os
 from datetime import date, datetime

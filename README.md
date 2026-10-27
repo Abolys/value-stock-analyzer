@@ -16,7 +16,7 @@ A personal research app: screens for value stocks, runs a four-lens analysis (Qu
 ## Start
 
 1. Unzip into an empty folder and run `git init`.
-2. `cp .env.example .env`, then fill in `ANTHROPIC_API_KEY` and `SEC_USER_AGENT` (your name and email; the SEC requires it). SMTP is optional. The Anthropic key is billed through the Claude Console, separately from your Claude subscription.
+2. `cp .env.example .env`, then fill in `ANTHROPIC_API_KEY` and `SEC_USER_AGENT` (your name and email; the SEC requires it). SMTP is optional. The Anthropic key is billed through the Claude Console.
 3. Run `claude` in the folder.
 4. Switch to plan mode (Shift+Tab), type `/phase-1`, review the plan, approve.
 5. When Phase 1 passes its checklist and commits, start a fresh session and run `/phase-2`. Continue through `/phase-6`.
@@ -59,7 +59,7 @@ See "After the build" in `docs/BUILD_PROMPTS.md`: the weekly screen schedule, mo
 
 `python scripts/share.py` prints a public https link to your running app (a free Cloudflare quick tunnel; the app itself still listens on localhost only). Visitors must sign in:
 
-- **viewer password** (`APP_VIEWER_PASSWORD` in `.env`, generated on first run): give this to your friend. Everything can be browsed, including your portfolio, but nothing is edited or saved, no screen or alert check starts, and the Moat / Devil's Advocate lenses show cached answers only (no calls on your API key or Claude subscription).
+- **viewer password** (`APP_VIEWER_PASSWORD` in `.env`, generated on first run): give this to your friend. Everything can be browsed, including your portfolio, but nothing is edited or saved, no screen or alert check starts, and the Moat / Devil's Advocate lenses show cached answers only (no calls on your API key).
 - **owner password** (`APP_OWNER_PASSWORD`): full access from anywhere.
 
 Your friend can leave comments with **💬 Feedback on the app** in the sidebar; you'll find them under **📥 Feedback received**. The link lasts while the script runs (Ctrl-C closes it) and changes each time.

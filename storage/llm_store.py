@@ -29,7 +29,7 @@ class LLMCallRecord(BaseModel):
     outcome: str = "ok"
     analysis_id: int | None = None
     created_at: datetime | None = None
-    backend: str = "api"  # api | claude_code
+    backend: str = "api"  # api | free
     list_price_cost: float = 0.0  # estimated at API list prices (what the call would cost on the API)
 
 
@@ -75,15 +75,6 @@ def month_spend(today: date | None = None, path: Path | str | None = None) -> tu
             "WHERE substr(created_at, 1, 7) = ?", (prefix,)).fetchone()
     return float(cost), int(n), int(hits)
 
-
-def month_claude_code(today: date | None = None, path: Path | str | None = None) -> tuple[int, float]:
-    """(calls, list-price equivalent) for Claude Code subscription calls in the calendar month (cache hits excluded)."""
-    today = today or date.today()
-    with connect(_db(path)) as conn:
-        n, est = conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(list_price_cost), 0) FROM llm_calls WHERE backend = 'claude_code' "
-            "AND cache_hit = 0 AND substr(created_at, 1, 7) = ?", (today.strftime("%Y-%m"),)).fetchone()
-    return int(n), float(est)
 
 
 def create_analysis(ticker: str, path: Path | str | None = None) -> int:

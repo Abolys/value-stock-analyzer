@@ -295,7 +295,7 @@ CHECKS = {"MELI": _meli, "HTZ": _htz, "LCID": _lcid, "LULU": _lulu, "JPM": _jpm}
 
 
 def main() -> int:
-    config.LLM_BACKEND = "none"  # offline: never reach the API or the Claude Code CLI (lens calls use FakeAPI)
+    config.LLM_BACKEND = "none"  # offline: never reach the API (lens calls use FakeAPI)
     provider = fixture_provider()
     failures = 0
     with tempfile.TemporaryDirectory() as tmp:

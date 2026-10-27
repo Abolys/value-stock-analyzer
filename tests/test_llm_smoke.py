@@ -1,6 +1,6 @@
 """Live smoke test for the LLM backend (CLAUDE.md Rule 4): one tiny call to the
-configured backend — the Anthropic API when ANTHROPIC_API_KEY is set, otherwise the
-Claude Code CLI — to verify key, model and network before relying on the lenses.
+configured backend (the free tier when FREE_LLM_API_KEY is set, else the Anthropic API)
+to verify key, model and network before relying on the lenses.
 
     pytest -m live tests/test_llm_smoke.py
 
@@ -24,7 +24,7 @@ class _Pong(BaseModel):
 def test_one_call_reaches_the_backend(tmp_path):
     llm = LLMClient(cache=LLMCache(tmp_path / "smoke_cache.db"), db_path=tmp_path / "smoke.db")
     if not llm.configured:
-        pytest.skip("no LLM backend: set ANTHROPIC_API_KEY or install the Claude Code CLI")
+        pytest.skip("no LLM backend: set FREE_LLM_API_KEY or ANTHROPIC_API_KEY")
     result = llm.run(ticker="SMOKE", lens="smoke", prompt_version="smoke-v1",
                      system="You answer with JSON matching the schema and nothing else.",
                      user='Reply with exactly "pong" as the value of word.',

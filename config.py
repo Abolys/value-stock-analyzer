@@ -228,20 +228,9 @@ FREE_LLM_MODEL = os.getenv("FREE_LLM_MODEL", "openai/gpt-oss-120b")
 FREE_LLM_TIMEOUT_SECONDS = 120
 # LLM backend (CLAUDE.md Rule 4). "auto": the free tier when FREE_LLM_API_KEY is set (falling
 # back to the Anthropic API on a failed call when ANTHROPIC_API_KEY is set), else the Anthropic
-# API, else the Claude Code CLI (`claude -p`, the user's Claude subscription). "api" /
-# "claude_code" / "free" force one; "none" disables the LLM lenses.
+# API. "api" / "free" force one; "none" disables the LLM lenses.
 LLM_BACKEND = os.getenv("LLM_BACKEND", "auto").strip().lower() or "auto"
-LLM_BACKENDS = ("auto", "api", "claude_code", "free", "none")
-# The CLI: CLAUDE_CODE_CLI in .env wins; else `claude` on PATH; else these globs (newest match),
-# which cover the binary bundled with the VS Code extension (including Flatpak VS Code).
-CLAUDE_CODE_CLI = os.getenv("CLAUDE_CODE_CLI", "")
-CLAUDE_CODE_CLI_GLOBS = [
-    "~/.local/bin/claude",
-    "~/.claude/local/claude",
-    "~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude",
-    "~/.var/app/com.visualstudio.code/data/vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude",
-]
-CLAUDE_CODE_TIMEOUT_SECONDS = 600  # one structured call, including the CLI's own start-up
+LLM_BACKENDS = ("auto", "api", "free", "none")
 
 # Moat lens: the prompt first names the single most relevant threat for the business.
 # Hints are matched on the yfinance industry by prefix first, then on the sector.

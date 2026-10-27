@@ -16,10 +16,8 @@
   free-tier call (bad auth, rate limit, outage) falls back to the Anthropic API when
   ANTHROPIC_API_KEY is set. The app enables that fallback only for the owner; a shared
   viewer's client is built with paid_fallback=False, so it stays on the free tier and a
-  failed call shows the lens as not available (nothing is billed). Else the Anthropic API;
-  else the Claude Code CLI on the
-  user's subscription (llm/claude_code.py), logged with a billed cost of $0 and its
-  list-price estimate. None available → "Insufficient data - LLM not configured", no call.
+  failed call shows the lens as not available (nothing is billed). Else the Anthropic API.
+  None available → "Insufficient data - LLM not configured", no call.
 
 The `api` object is injectable (anything with `.messages.create(**params)`),
 so tests mock it and never reach the network.
@@ -37,15 +35,14 @@ import anthropic
 from pydantic import BaseModel, ValidationError
 
 import config
-from llm import claude_code, free_api
+from llm import free_api
 from llm.cache import LLMCache, payload_hash
 from storage.llm_store import LLMCallRecord, log_call
 
 log = logging.getLogger(__name__)
 
 INSUFFICIENT = "Insufficient data"
-NOT_CONFIGURED = (f"{INSUFFICIENT} - LLM not configured (no FREE_LLM_API_KEY, no ANTHROPIC_API_KEY "
-                  "and no Claude Code CLI found; see LLM_BACKEND / CLAUDE_CODE_CLI)")
+NOT_CONFIGURED = f"{INSUFFICIENT} - LLM not configured (no FREE_LLM_API_KEY and no ANTHROPIC_API_KEY; see LLM_BACKEND)"
 API = "api"
 
 Validator = Callable[[BaseModel], list[str]]
@@ -59,7 +56,7 @@ class LLMResult(BaseModel):
     attempts: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
-    cost: float = 0.0  # billed API cost ($0 on the Claude Code subscription backend)
+    cost: float = 0.0  # billed API cost ($0 on the free tier)
     list_price_cost: float = 0.0
     errors: list[str] = []
 
@@ -80,7 +77,7 @@ def output_schema(schema: type[BaseModel]) -> dict[str, Any]:
 def choose_backend(api_key: str | None = None, backend: str | None = None,
                    free_key: str | None = None) -> tuple[Any, str]:
     """(api object or None, backend name) per LLM_BACKEND: the free tier with FREE_LLM_API_KEY,
-    else the Anthropic API with a key, else the Claude Code CLI. The free tier's API fallback
+    else the Anthropic API with a key. The free tier's API fallback
     is decided in LLMClient, so it stays out of the forced-backend choices."""
     backend = backend or config.LLM_BACKEND
     if backend not in config.LLM_BACKENDS:
@@ -91,10 +88,6 @@ def choose_backend(api_key: str | None = None, backend: str | None = None,
     key = api_key if api_key is not None else os.getenv("ANTHROPIC_API_KEY", config.ANTHROPIC_API_KEY)
     if backend in ("auto", API) and key:
         return anthropic.Anthropic(api_key=key, timeout=config.LLM_TIMEOUT_SECONDS), API
-    if backend in ("auto", claude_code.BACKEND):
-        cli = claude_code.find_cli()
-        if cli:
-            return claude_code.ClaudeCodeAPI(cli), claude_code.BACKEND
     return None, "none"
 
 
@@ -193,8 +186,7 @@ class LLMClient:
                 params["model"] = model
                 try:
                     resp = api.messages.create(**params)
-                except (anthropic.APIError, claude_code.ClaudeCodeError,
-                        free_api.FreeTierError) as exc:  # the SDK already retried 429/5xx
+                except (anthropic.APIError, free_api.FreeTierError) as exc:  # the SDK already retried 429/5xx
                     msg = f"API error: {type(exc).__name__}: {getattr(exc, 'message', exc)}"
                     if self._fallback is not None:
                         msg += " (falling back to the Anthropic API)"

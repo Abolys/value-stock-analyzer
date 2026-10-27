@@ -39,7 +39,7 @@ def confirm_departure(doc: FilingDoc, ticker: str, llm: LLMClient) -> LLMConfirm
 
 
 def default_confirm(doc: FilingDoc, ticker: str) -> LLMConfirmation:
-    """The confirm used when none is passed: the configured backend (API key, else Claude Code),
+    """The confirm used when none is passed: the configured backend (free tier, else API key),
     or "unconfirmed" when neither is available."""
     global _default
     with _default_lock:
@@ -47,7 +47,7 @@ def default_confirm(doc: FilingDoc, ticker: str) -> LLMConfirmation:
         if llm.configured:
             _default = llm
     if not llm.configured:
-        return LLMConfirmation(status="unconfirmed", note="LLM not configured (no API key and no Claude Code CLI)")
+        return LLMConfirmation(status="unconfirmed", note="LLM not configured (no FREE_LLM_API_KEY and no ANTHROPIC_API_KEY)")
     return confirm_departure(doc, ticker, llm)
 
 

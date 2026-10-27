@@ -83,7 +83,6 @@ ANTHROPIC_MODEL=claude-sonnet-5
 
 # If you don't have an API key, the app still works! Basic quant analysis, ratios,
 # signals, screeners, and turnaround metrics work completely offline/without an API key.
-# If you use Claude Code CLI, set LLM_BACKEND=auto or LLM_BACKEND=claude_code.
 LLM_BACKEND=auto
 
 # --- Optional: Remote Sharing & Authentication ---

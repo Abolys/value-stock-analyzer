@@ -1,6 +1,5 @@
 """LLM calibration (SPEC "Calibration"). Live: calls the configured LLM backend — the
-Anthropic API when ANTHROPIC_API_KEY is set (billed), otherwise the Claude Code CLI on
-the Claude subscription.
+free tier when FREE_LLM_API_KEY is set, else the Anthropic API (billed).
 
     pytest -m live tests/test_calibration.py
 
@@ -92,7 +91,7 @@ def shifts(previous: dict, current: dict) -> list[str]:
 def test_calibration(tmp_path):
     llm = LLMClient(cache=LLMCache(tmp_path / "calibration_cache.db"), db_path=REAL_RUNS_DB)
     if not llm.configured:
-        pytest.skip("no LLM backend: set ANTHROPIC_API_KEY or install the Claude Code CLI")
+        pytest.skip("no LLM backend: set FREE_LLM_API_KEY or ANTHROPIC_API_KEY")
     results = {t: score_ticker(t, llm, tmp_path / "runs.db") for t in config.GOLDEN_TICKERS}
     failed = {t: {k: r[k]["status"] for k in LENSES if r[k]["status"] != "ok"} for t, r in results.items()}
     failed = {t: v for t, v in failed.items() if v}

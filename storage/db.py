@@ -91,12 +91,12 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     prompt_version TEXT NOT NULL,
     input_tokens INTEGER NOT NULL,
     output_tokens INTEGER NOT NULL,
-    cost REAL NOT NULL,           -- billed API cost ($0 on the Claude Code subscription backend)
+    cost REAL NOT NULL,           -- billed API cost ($0 on the free tier)
     cache_hit INTEGER NOT NULL,
     attempt INTEGER NOT NULL,
     outcome TEXT NOT NULL,        -- ok | invalid: <reason> | error: <reason>
     created_at TEXT NOT NULL,
-    backend TEXT NOT NULL DEFAULT 'api',     -- api | free | claude_code
+    backend TEXT NOT NULL DEFAULT 'api',     -- api | free (claude_code in rows from before its removal)
     list_price_cost REAL NOT NULL DEFAULT 0  -- estimated cost at API list prices
 );
 -- Phase 6: portfolio, thesis journal and alerts (helpers in portfolio/store.py)

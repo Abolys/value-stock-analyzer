@@ -22,9 +22,17 @@ from typing import Any
 import requests
 
 import config
-from llm import claude_code  # strip_text_format: make the schema plain JSON Schema for the prompt
 
 BACKEND = "free"
+
+
+def strip_text_format(schema: Any) -> Any:
+    """Drop the SDK's `"format": "text"` string annotations, which are not standard JSON Schema."""
+    if isinstance(schema, dict):
+        return {k: strip_text_format(v) for k, v in schema.items() if not (k == "format" and v == "text")}
+    if isinstance(schema, list):
+        return [strip_text_format(v) for v in schema]
+    return schema
 
 
 class FreeTierError(Exception):
@@ -63,7 +71,7 @@ class FreeAPI:
 
     def create(self, **params: Any) -> SimpleNamespace:
         """The Anthropic-style params → one chat-completions call → an Anthropic-shaped result."""
-        schema = claude_code.strip_text_format(params["output_config"]["format"]["schema"])
+        schema = strip_text_format(params["output_config"]["format"]["schema"])
         system = (params["system"]
                   + "\n\nRespond with a JSON object only, matching this JSON schema:\n"
                   + json.dumps(schema, sort_keys=True))

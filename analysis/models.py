@@ -116,7 +116,7 @@ class LLMLensResult(LensResult):
     model: str = ""
     evidence: list[EvidenceItem] = Field(default_factory=list)
     cache_hit: bool = False
-    cost: float = 0.0  # billed API cost ($0 on the Claude Code subscription backend)
+    cost: float = 0.0  # billed API cost ($0 on the free tier)
     list_price_cost: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0

@@ -117,7 +117,6 @@ def test_choose_backend_order(monkeypatch):
     assert backend == "free"
     api, backend = choose_backend(backend="auto", free_key="", api_key="sk-ant")
     assert backend == "api"
-    monkeypatch.setattr("llm.claude_code.find_cli", lambda: None)
     api, backend = choose_backend(backend="auto", free_key="", api_key="")
     assert (api, backend) == (None, "none")
     api, backend = choose_backend(backend="none", free_key="sk-free", api_key="sk-ant")
@@ -236,3 +235,9 @@ def test_forced_free_without_a_key_is_not_configured(tmp_path, monkeypatch):
                      schema=MoatResponse, cache_key="k")
     assert not result.ok and "LLM not configured" in result.status
 
+
+
+def test_strip_text_format_keeps_real_formats():
+    s = {"properties": {"a": {"type": "string", "format": "text"}, "d": {"type": "string", "format": "date"}}}
+    assert free_api.strip_text_format(s) == {"properties": {"a": {"type": "string"},
+                                                            "d": {"type": "string", "format": "date"}}}

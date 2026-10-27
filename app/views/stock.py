@@ -454,8 +454,7 @@ def draw_all(lay: Layout, e: Entry, provider) -> None:
 
 def llm_notice() -> LLMClient:
     if not auth.is_owner():
-        # A shared viewer runs on the free tier only - never the owner's API key or Claude
-        # subscription: a failed free-tier call leaves the lens "not available", nothing is billed.
+        # A shared viewer runs on the free tier only - never the owner's API key: a failed free-tier call leaves the lens "not available", nothing is billed.
         viewer = LLMClient(db_path=config.RUNS_DB_PATH, backend="free", paid_fallback=False)
         if viewer.configured:
             st.caption(f"Viewing read-only: the Moat and Devil's Advocate lenses run on the free tier "
@@ -470,13 +469,9 @@ def llm_notice() -> LLMClient:
         st.caption(f"LLM lenses run on the free tier ({llm.model}): no charge. A failed free-tier call (rate "
                    "limit, outage) falls back to the Anthropic API, which is billed; each call is logged with "
                    "its backend and cost.")
-    elif llm.backend == "claude_code":
-        st.caption("LLM lenses run through the Claude Code CLI on your Claude subscription (no ANTHROPIC_API_KEY "
-                   "set): no API charge; the list-price equivalent is logged.")
     elif not llm.configured:
-        st.info("No FREE_LLM_API_KEY, no ANTHROPIC_API_KEY and no Claude Code CLI found: the Moat and Devil's "
-                "Advocate lenses will return \"Insufficient data - LLM not configured\" (cached answers are still "
-                "used). Set CLAUDE_CODE_CLI in .env if the CLI is installed somewhere unusual.")
+        st.info("No FREE_LLM_API_KEY and no ANTHROPIC_API_KEY set: the Moat and Devil's Advocate lenses will "
+                "return \"Insufficient data - LLM not configured\" (cached answers are still used).")
     return llm
 
 

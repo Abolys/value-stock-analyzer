@@ -4,7 +4,7 @@
 - Through the share tunnel or on Streamlit Cloud: a login. APP_OWNER_PASSWORD gives full access;
   APP_VIEWER_PASSWORD gives read-only access: every page can be browsed, but nothing is edited, no
   screen or alert check is started, and the LLM lenses use cached answers only (no calls on the
-  owner's API key or Claude subscription). With no passwords set, remote requests are refused.
+  owner's API key). With no passwords set, remote requests are refused.
   The passwords are read from .env / the environment, or — when the deploy has no .env (Streamlit
   Cloud) — from st.secrets, i.e. the Cloud dashboard's settings → secrets.
 
